@@ -101,8 +101,8 @@ jobs:
         run: |
           ssh-keyscan -H "${TARGET_SSH_HOST}" >> ~/.ssh/known_hosts
 
-          # IMPORTANT CHANGE: Removed single quotes from << 'EOF' to allow variable expansion
-          ssh -o StrictHostKeyChecking=no "${TARGET_SSH_USER}@${TARGET_SSH_HOST}" << EOF
+          # IMPORTANT CHANGE: Added the -t flag to force pseudo-terminal allocation.
+          ssh -t -o StrictHostKeyChecking=no "${TARGET_SSH_USER}@${TARGET_SSH_HOST}" << EOF
             set -ex
 
             # --- 1. SET UP APPLICATION DIRECTORY AND FILES ---
@@ -170,7 +170,6 @@ jobs:
             echo "[Service]" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
             echo "WorkingDirectory=${{ env.SERVER_APP_DIR }}" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
             echo "Restart=always" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
-            # Note: For systemd, you should use the full path to docker-compose if it's not in /usr/bin/
             echo "ExecStart=$(which docker-compose) up" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
             echo "ExecStop=$(which docker-compose) down" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
             echo "" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}

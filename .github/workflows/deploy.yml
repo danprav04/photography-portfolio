@@ -69,16 +69,62 @@ jobs:
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+      - name: Prepare Compose File Content
+        id: prepare-compose
+        run: |
+          # Use a 'Here String' to safely read the multi-line YAML into a variable
+          # This avoids all quoting and nesting issues.
+          COMPOSE_CONTENT=$(cat <<EOF
+          version: "3.8"
+          services:
+            portfolio-app:
+              image: "${{ needs.build-and-push-image.outputs.image_uri }}"
+              container_name: portfolio-app
+              restart: unless-stopped
+              env_file: .env
+              ports:
+                - "8000:8000"
+              networks:
+                - portfolio-net
+              depends_on:
+                - minio
+              command: gunicorn --bind 0.0.0.0:8000 "app:create_app()"
+            minio:
+              image: minio/minio:RELEASE.2024-07-20T00-01-19Z
+              container_name: minio-server
+              restart: unless-stopped
+              env_file: .env
+              ports:
+                - "9000:9000"
+                - "9001:9001"
+              volumes:
+                - minio-data:/data
+              networks:
+                - portfolio-net
+              command: server /data --console-address ":9001"
+          volumes:
+            minio-data:
+              driver: local
+          networks:
+            portfolio-net:
+              driver: bridge
+          EOF
+          )
+          # Make the variable available to subsequent steps
+          echo "compose_file_content<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMPOSE_CONTENT" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
       - name: Deploy via SSH
         env:
           TARGET_SSH_HOST: ${{ secrets.SSH_HOST }}
           TARGET_SSH_USER: ${{ secrets.SSH_USER }}
-          FULL_IMAGE_URI: ${{ needs.build-and-push-image.outputs.image_uri }}
           GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
           GHCR_USERNAME: ${{ github.repository_owner }}
           MINIO_ROOT_USER: ${{ secrets.MINIO_ROOT_USER }}
           MINIO_ROOT_PASSWORD: ${{ secrets.MINIO_ROOT_PASSWORD }}
           MINIO_BUCKET_NAME: ${{ secrets.MINIO_BUCKET_NAME }}
+          # Pass the compose file content from the previous step
+          COMPOSE_FILE_CONTENT: ${{ steps.prepare-compose.outputs.compose_file_content }}
         run: |
           ssh-keyscan -H "${TARGET_SSH_HOST}" >> ~/.ssh/known_hosts
           ssh -o StrictHostKeyChecking=no "${TARGET_SSH_USER}@${TARGET_SSH_HOST}" << EOF
@@ -91,42 +137,8 @@ jobs:
             echo "FLASK_ENV=production" | sudo tee -a ${{ env.SERVER_APP_DIR }}/.env > /dev/null
             sudo chmod 600 ${{ env.SERVER_APP_DIR }}/.env
 
-            # Use a robust heredoc to write the docker-compose.yml file
-            sudo tee ${{ env.SERVER_APP_DIR }}/docker-compose.yml > /dev/null << "COMPOSE_YML"
-            version: "3.8"
-            services:
-              portfolio-app:
-                image: "${FULL_IMAGE_URI}"
-                container_name: portfolio-app
-                restart: unless-stopped
-                env_file: .env
-                ports:
-                  - "8000:8000"
-                networks:
-                  - portfolio-net
-                depends_on:
-                  - minio
-                command: gunicorn --bind 0.0.0.0:8000 "app:create_app()"
-              minio:
-                image: minio/minio:RELEASE.2024-07-20T00-01-19Z
-                container_name: minio-server
-                restart: unless-stopped
-                env_file: .env
-                ports:
-                  - "9000:9000"
-                  - "9001:9001"
-                volumes:
-                  - minio-data:/data
-                networks:
-                  - portfolio-net
-                command: server /data --console-address ":9001"
-            volumes:
-              minio-data:
-                driver: local
-            networks:
-              portfolio-net:
-                driver: bridge
-            COMPOSE_YML
+            # Write the compose file using the variable. This is safe and reliable.
+            echo "${COMPOSE_FILE_CONTENT}" | sudo tee ${{ env.SERVER_APP_DIR }}/docker-compose.yml > /dev/null
 
             echo "${GHCR_PULL_TOKEN}" | sudo docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
 

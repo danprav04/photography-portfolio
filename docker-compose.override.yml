@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  portfolio-app:
+    # Use Flask's built-in development server with debug mode
+    # It will watch for file changes and automatically reload.
+    command: flask --app app run --host=0.0.0.0 --port=8000 --debug
+    
+    # Mount the application code directory from your host machine
+    # into the container. This makes code changes available instantly.
+    volumes:
+      - ./app:/app/app
+      
+    # Set the FLASK_ENV variable to development. This can also be done
+    # in the .env file, but setting it here makes it explicit for development.
+    environment:
+      - FLASK_ENV=development

@@ -81,11 +81,15 @@ jobs:
           MINIO_BUCKET_NAME: ${{ secrets.MINIO_BUCKET_NAME }}
         run: |
           ssh-keyscan -H "${TARGET_SSH_HOST}" >> ~/.ssh/known_hosts
-          # THE ONLY CHANGE IS HERE: Removed single quotes from << 'EOF'
           ssh -o StrictHostKeyChecking=no "${TARGET_SSH_USER}@${TARGET_SSH_HOST}" << EOF
             set -ex
 
-            # --- 1. SET UP APPLICATION DIRECTORY AND FILES ---
+            # Check for token existence before proceeding
+            if [ -z "${GHCR_PULL_TOKEN}" ]; then
+                echo "FATAL: GHCR_PULL_TOKEN is empty. Check environment secrets."
+                exit 1
+            fi
+
             sudo mkdir -p ${{ env.SERVER_APP_DIR }}
             echo "MINIO_ROOT_USER=${MINIO_ROOT_USER}" | sudo tee ${{ env.SERVER_APP_DIR }}/.env > /dev/null
             echo "MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}" | sudo tee -a ${{ env.SERVER_APP_DIR }}/.env > /dev/null
@@ -121,25 +125,11 @@ jobs:
                 driver: bridge
             " | sudo tee ${{ env.SERVER_APP_DIR }}/docker-compose.yml > /dev/null
 
-            # --- 2. SECURELY DEBUG AND LOG IN TO REGISTRY ---
-            TOKEN="${GHCR_PULL_TOKEN}"
-            
-            TOKEN_LENGTH=$(echo -n "${TOKEN}" | wc -c)
-            TOKEN_PREFIX=$(echo -n "${TOKEN}" | cut -c 1-4)
-            echo "DEBUG: GHCR_PULL_TOKEN length is: ${TOKEN_LENGTH}"
-            echo "DEBUG: GHCR_PULL_TOKEN prefix is: ${TOKEN_PREFIX}"
+            echo "${GHCR_PULL_TOKEN}" | sudo docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
 
-            if [ "${TOKEN_LENGTH}" -lt 30 ]; then
-                echo "FATAL ERROR: The GHCR_PULL_TOKEN is too short or empty. Please check the secret in the 'production' environment."
-                exit 1
-            fi
-            
-            echo -n "${TOKEN}" | sudo docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
-
-            # --- 3. PULL NEW IMAGE & RESTART SERVICE ---
             cd ${{ env.SERVER_APP_DIR }}
             sudo docker-compose pull
-            
+
             echo "[Unit]" | sudo tee /etc/systemd/system/${{ env.SERVICE_NAME }}
             echo "Description=Portfolio App Service" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
             echo "Requires=docker.service" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}

@@ -101,7 +101,8 @@ jobs:
         run: |
           ssh-keyscan -H "${TARGET_SSH_HOST}" >> ~/.ssh/known_hosts
 
-          ssh -o StrictHostKeyChecking=no "${TARGET_SSH_USER}@${TARGET_SSH_HOST}" << 'EOF'
+          # IMPORTANT CHANGE: Removed single quotes from << 'EOF' to allow variable expansion
+          ssh -o StrictHostKeyChecking=no "${TARGET_SSH_USER}@${TARGET_SSH_HOST}" << EOF
             set -ex
 
             # --- 1. SET UP APPLICATION DIRECTORY AND FILES ---
@@ -112,7 +113,7 @@ jobs:
             echo "MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}" | sudo tee -a ${{ env.SERVER_APP_DIR }}/.env > /dev/null
             echo "MINIO_BUCKET_NAME=${MINIO_BUCKET_NAME}" | sudo tee -a ${{ env.SERVER_APP_DIR }}/.env > /dev/null
             echo "FLASK_ENV=production" | sudo tee -a ${{ env.SERVER_APP_DIR }}/.env > /dev/null
-            sudo chmod 600 ${{ env.SERVER_APP_DIR }}/.env # Set secure permissions
+            sudo chmod 600 ${{ env.SERVER_APP_DIR }}/.env
 
             # Write the production docker-compose.yml file. The image URI is dynamically inserted.
             echo "version: '3.8'
@@ -169,8 +170,9 @@ jobs:
             echo "[Service]" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
             echo "WorkingDirectory=${{ env.SERVER_APP_DIR }}" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
             echo "Restart=always" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
-            echo "ExecStart=/usr/bin/docker-compose up" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
-            echo "ExecStop=/usr/bin/docker-compose down" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
+            # Note: For systemd, you should use the full path to docker-compose if it's not in /usr/bin/
+            echo "ExecStart=$(which docker-compose) up" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
+            echo "ExecStop=$(which docker-compose) down" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
             echo "" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
             echo "[Install]" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
             echo "WantedBy=multi-user.target" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}

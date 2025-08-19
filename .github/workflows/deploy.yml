@@ -40,7 +40,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_OWNER_LC }}/${{ env.IMAGE_NAME }}
           tags: |
-            type=sha,prefix,format=short
+            type=sha,prefix=,format=short
             type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -81,7 +81,8 @@ jobs:
           MINIO_BUCKET_NAME: ${{ secrets.MINIO_BUCKET_NAME }}
         run: |
           ssh-keyscan -H "${TARGET_SSH_HOST}" >> ~/.ssh/known_hosts
-          ssh -o StrictHostKeyChecking=no "${TARGET_SSH_USER}@${TARGET_SSH_HOST}" << 'EOF'
+          # THE ONLY CHANGE IS HERE: Removed single quotes from << 'EOF'
+          ssh -o StrictHostKeyChecking=no "${TARGET_SSH_USER}@${TARGET_SSH_HOST}" << EOF
             set -ex
 
             # --- 1. SET UP APPLICATION DIRECTORY AND FILES ---
@@ -92,7 +93,6 @@ jobs:
             echo "FLASK_ENV=production" | sudo tee -a ${{ env.SERVER_APP_DIR }}/.env > /dev/null
             sudo chmod 600 ${{ env.SERVER_APP_DIR }}/.env
 
-            # The rest of the file writing is the same...
             echo "version: '3.8'
             services:
               portfolio-app:
@@ -122,9 +122,7 @@ jobs:
             " | sudo tee ${{ env.SERVER_APP_DIR }}/docker-compose.yml > /dev/null
 
             # --- 2. SECURELY DEBUG AND LOG IN TO REGISTRY ---
-            # IMPORTANT: Using single quotes around the secret to preserve special characters
-            # that the shell might otherwise interpret.
-            TOKEN='${GHCR_PULL_TOKEN}'
+            TOKEN="${GHCR_PULL_TOKEN}"
             
             TOKEN_LENGTH=$(echo -n "${TOKEN}" | wc -c)
             TOKEN_PREFIX=$(echo -n "${TOKEN}" | cut -c 1-4)
@@ -132,15 +130,11 @@ jobs:
             echo "DEBUG: GHCR_PULL_TOKEN prefix is: ${TOKEN_PREFIX}"
 
             if [ "${TOKEN_LENGTH}" -lt 30 ]; then
-                echo "FATAL ERROR: The GHCR_PULL_TOKEN is too short or empty. Please regenerate it as a Classic PAT."
+                echo "FATAL ERROR: The GHCR_PULL_TOKEN is too short or empty. Please check the secret in the 'production' environment."
                 exit 1
             fi
             
-            # Use a temporary file for the password to avoid shell piping issues.
-            echo -n "${TOKEN}" | sudo tee /tmp/ghcr_token.txt > /dev/null
-            sudo chmod 600 /tmp/ghcr_token.txt
-            cat /tmp/ghcr_token.txt | sudo docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
-            sudo rm /tmp/ghcr_token.txt
+            echo -n "${TOKEN}" | sudo docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
 
             # --- 3. PULL NEW IMAGE & RESTART SERVICE ---
             cd ${{ env.SERVER_APP_DIR }}

@@ -91,41 +91,48 @@ jobs:
             echo "FLASK_ENV=production" | sudo tee -a ${{ env.SERVER_APP_DIR }}/.env > /dev/null
             sudo chmod 600 ${{ env.SERVER_APP_DIR }}/.env
 
-            echo "version: '3.8'
+            # Use a robust heredoc to write the docker-compose.yml file
+            sudo tee ${{ env.SERVER_APP_DIR }}/docker-compose.yml > /dev/null << "COMPOSE_YML"
+            version: "3.8"
             services:
               portfolio-app:
-                image: ${{ env.FULL_IMAGE_URI }}
+                image: "${FULL_IMAGE_URI}"
                 container_name: portfolio-app
                 restart: unless-stopped
                 env_file: .env
-                ports: ['8000:8000']
-                networks: [portfolio-net]
-                depends_on: [minio]
-                command: gunicorn --bind 0.0.0.0:8000 'app:create_app()'
+                ports:
+                  - "8000:8000"
+                networks:
+                  - portfolio-net
+                depends_on:
+                  - minio
+                command: gunicorn --bind 0.0.0.0:8000 "app:create_app()"
               minio:
                 image: minio/minio:RELEASE.2024-07-20T00-01-19Z
                 container_name: minio-server
                 restart: unless-stopped
                 env_file: .env
-                ports: ['9000:9000', '9001:9001']
-                volumes: [minio-data:/data]
-                networks: [portfolio-net]
-                command: server /data --console-address ':9001'
+                ports:
+                  - "9000:9000"
+                  - "9001:9001"
+                volumes:
+                  - minio-data:/data
+                networks:
+                  - portfolio-net
+                command: server /data --console-address ":9001"
             volumes:
               minio-data:
                 driver: local
             networks:
               portfolio-net:
                 driver: bridge
-            " | sudo tee ${{ env.SERVER_APP_DIR }}/docker-compose.yml > /dev/null
+            COMPOSE_YML
 
             echo "${GHCR_PULL_TOKEN}" | sudo docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
 
             cd ${{ env.SERVER_APP_DIR }}
-            # Use modern 'docker compose' (with a space)
             sudo docker compose pull
 
-            # Use modern 'docker compose' in the systemd service file
             echo "[Unit]" | sudo tee /etc/systemd/system/${{ env.SERVICE_NAME }}
             echo "Description=Portfolio App Service" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
             echo "Requires=docker.service" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}

@@ -13,8 +13,9 @@ ENV PYTHONUNBUFFERED 1
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Stage 5: Copy the application code into the container
+# Stage 5: Copy the application code and config into the container
 COPY ./app /app/app
+COPY portfolio_config.json .
 
 # Stage 6: Expose the port the app runs on
 EXPOSE 8000

@@ -82,10 +82,19 @@ jobs:
         run: |
           ssh-keyscan -H "${TARGET_SSH_HOST}" >> ~/.ssh/known_hosts
 
-          # Removed the '-t' flag as it was not the solution
           ssh -o StrictHostKeyChecking=no "${TARGET_SSH_USER}@${TARGET_SSH_HOST}" << EOF
             set -ex
 
+            # --- PRE-FLIGHT CHECKS ---
+            # This is the new debugging step.
+            # It checks if the GHCR_PULL_TOKEN variable is empty and fails if it is.
+            if [ -z "${GHCR_PULL_TOKEN}" ]; then
+              echo "FATAL ERROR: The GHCR_PULL_TOKEN secret is empty or not configured."
+              echo "Please verify the secret exists in the repository's 'production' environment secrets."
+              exit 1
+            fi
+
+            # --- 1. SET UP APPLICATION DIRECTORY AND FILES ---
             sudo mkdir -p ${{ env.SERVER_APP_DIR }}
 
             echo "MINIO_ROOT_USER=${MINIO_ROOT_USER}" | sudo tee ${{ env.SERVER_APP_DIR }}/.env > /dev/null
@@ -94,6 +103,7 @@ jobs:
             echo "FLASK_ENV=production" | sudo tee -a ${{ env.SERVER_APP_DIR }}/.env > /dev/null
             sudo chmod 600 ${{ env.SERVER_APP_DIR }}/.env
 
+            # (The rest of the file is the same as before)
             echo "version: '3.8'
             services:
               portfolio-app:
@@ -122,11 +132,13 @@ jobs:
                 driver: bridge
             " | sudo tee ${{ env.SERVER_APP_DIR }}/docker-compose.yml > /dev/null
             
+            # --- 2. LOG IN TO REGISTRY AND PULL NEW IMAGE ---
             echo "${GHCR_PULL_TOKEN}" | sudo docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
             
             cd ${{ env.SERVER_APP_DIR }}
             sudo docker-compose pull
             
+            # --- 3. CREATE AND ENABLE SYSTEMD SERVICE ---
             echo "[Unit]" | sudo tee /etc/systemd/system/${{ env.SERVICE_NAME }}
             echo "Description=Portfolio App Service" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
             echo "Requires=docker.service" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
@@ -141,10 +153,12 @@ jobs:
             echo "[Install]" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
             echo "WantedBy=multi-user.target" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
 
+            # --- 4. RELOAD AND RESTART THE SERVICE ---
             sudo systemctl daemon-reload
             sudo systemctl enable ${{ env.SERVICE_NAME }}
             sudo systemctl restart ${{ env.SERVICE_NAME }}
 
+            # --- 5. CLEANUP ---
             sudo docker image prune -f
 
             echo "Deployment finished successfully."

@@ -84,12 +84,6 @@ jobs:
           ssh -o StrictHostKeyChecking=no "${TARGET_SSH_USER}@${TARGET_SSH_HOST}" << EOF
             set -ex
 
-            # Check for token existence before proceeding
-            if [ -z "${GHCR_PULL_TOKEN}" ]; then
-                echo "FATAL: GHCR_PULL_TOKEN is empty. Check environment secrets."
-                exit 1
-            fi
-
             sudo mkdir -p ${{ env.SERVER_APP_DIR }}
             echo "MINIO_ROOT_USER=${MINIO_ROOT_USER}" | sudo tee ${{ env.SERVER_APP_DIR }}/.env > /dev/null
             echo "MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}" | sudo tee -a ${{ env.SERVER_APP_DIR }}/.env > /dev/null
@@ -128,8 +122,10 @@ jobs:
             echo "${GHCR_PULL_TOKEN}" | sudo docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
 
             cd ${{ env.SERVER_APP_DIR }}
-            sudo docker-compose pull
+            # Use modern 'docker compose' (with a space)
+            sudo docker compose pull
 
+            # Use modern 'docker compose' in the systemd service file
             echo "[Unit]" | sudo tee /etc/systemd/system/${{ env.SERVICE_NAME }}
             echo "Description=Portfolio App Service" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
             echo "Requires=docker.service" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
@@ -137,8 +133,8 @@ jobs:
             echo "[Service]" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
             echo "WorkingDirectory=${{ env.SERVER_APP_DIR }}" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
             echo "Restart=always" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
-            echo "ExecStart=$(which docker-compose) up" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
-            echo "ExecStop=$(which docker-compose) down" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
+            echo "ExecStart=/usr/bin/docker compose up" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
+            echo "ExecStop=/usr/bin/docker compose down" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
             echo "[Install]" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
             echo "WantedBy=multi-user.target" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
 

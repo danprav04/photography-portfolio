@@ -27,7 +27,7 @@ def build_llm_context(project_root='.', output_file='llm_context.txt'):
         matches = lambda x: False
 
     # Standard directories and files to always ignore
-    default_ignored_dirs = {'.git', '.github', '__pycache__', 'node_modules', 'venv', '.venv'}
+    default_ignored_dirs = {'.git', '__pycache__', 'node_modules', 'venv', '.venv'}
     default_ignored_files = {'.DS_Store', 'llm_context.txt'}
 
     with open(output_file, 'w', encoding='utf-8') as outfile:

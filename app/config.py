@@ -2,7 +2,7 @@ import os
 import json
 from dotenv import load_dotenv
 
-# Load environment variables from .env file for secrets
+# Load environment variables from .env file
 basedir = os.path.abspath(os.path.dirname(__file__))
 load_dotenv(os.path.join(basedir, '..', '.env'))
 
@@ -19,12 +19,12 @@ except FileNotFoundError:
 class Config:
     """Base configuration class."""
     
-    # --- SECRETS (from Environment Variables) ---
-    MINIO_ENDPOINT = os.getenv('MINIO_ENDPOINT', 'minio:9000')
-    MINIO_ACCESS_KEY = os.getenv('MINIO_ROOT_USER')
-    MINIO_SECRET_KEY = os.getenv('MINIO_ROOT_PASSWORD')
-    MINIO_BUCKET_NAME = os.getenv('MINIO_BUCKET_NAME', 'portfolio')
-    MINIO_SECURE = os.getenv('MINIO_SECURE', 'False').lower() in ['true', '1', 't']
+    # --- SECRETS for OCI Object Storage (from Environment Variables) ---
+    OCI_ENDPOINT_URL = os.getenv('OCI_ENDPOINT_URL')
+    OCI_REGION = os.getenv('OCI_REGION')
+    OCI_ACCESS_KEY_ID = os.getenv('OCI_ACCESS_KEY_ID')
+    OCI_SECRET_ACCESS_KEY = os.getenv('OCI_SECRET_ACCESS_KEY')
+    OCI_BUCKET_NAME = os.getenv('OCI_BUCKET_NAME', 'portfolio')
 
     # --- PUBLIC CONTENT (from JSON file, with fallbacks) ---
     PORTFOLIO_TITLE = content_config.get('PORTFOLIO_TITLE', 'My Photography Portfolio')

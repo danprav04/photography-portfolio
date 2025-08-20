@@ -73,7 +73,6 @@ jobs:
         id: prepare-compose
         run: |
           # Read the multi-line YAML and base64 encode it for safe transmission.
-          # The -w 0 flag for base64 prevents line wrapping.
           COMPOSE_CONTENT_B64=$(cat <<EOF | base64 -w 0
           version: "3.8"
           services:
@@ -86,31 +85,11 @@ jobs:
                 - "8000:8000"
               networks:
                 - portfolio-net
-              depends_on:
-                - minio
-              command: gunicorn --bind 0.0.0.0:8000 "app:create_app()"
-            minio:
-              image: quay.io/minio/minio:RELEASE.2025-07-23T15-54-02Z
-              container_name: minio-server
-              restart: unless-stopped
-              env_file: .env
-              ports:
-                - "9000:9000"
-                - "9001:9001"
-              volumes:
-                - minio-data:/data
-              networks:
-                - portfolio-net
-              command: server /data --console-address ":9001"
-          volumes:
-            minio-data:
-              driver: local
           networks:
             portfolio-net:
               driver: bridge
           EOF
           )
-          # Make the base64 variable available to the next job
           echo "compose_file_b64=${COMPOSE_CONTENT_B64}" >> $GITHUB_OUTPUT
       - name: Deploy via SSH
         env:
@@ -118,31 +97,38 @@ jobs:
           TARGET_SSH_USER: ${{ secrets.SSH_USER }}
           GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
           GHCR_USERNAME: ${{ github.repository_owner }}
-          MINIO_ROOT_USER: ${{ secrets.MINIO_ROOT_USER }}
-          MINIO_ROOT_PASSWORD: ${{ secrets.MINIO_ROOT_PASSWORD }}
-          MINIO_BUCKET_NAME: ${{ secrets.MINIO_BUCKET_NAME }}
-          # Pass the base64 encoded compose file content from the previous step
+          OCI_ENDPOINT_URL: ${{ secrets.OCI_ENDPOINT_URL }}
+          OCI_REGION: ${{ secrets.OCI_REGION }}
+          OCI_ACCESS_KEY_ID: ${{ secrets.OCI_ACCESS_KEY_ID }}
+          OCI_SECRET_ACCESS_KEY: ${{ secrets.OCI_SECRET_ACCESS_KEY }}
+          OCI_BUCKET_NAME: ${{ secrets.OCI_BUCKET_NAME }}
           COMPOSE_FILE_B64: ${{ steps.prepare-compose.outputs.compose_file_b64 }}
         run: |
           ssh-keyscan -H "${TARGET_SSH_HOST}" >> ~/.ssh/known_hosts
           ssh -o StrictHostKeyChecking=no "${TARGET_SSH_USER}@${TARGET_SSH_HOST}" << EOF
             set -ex
 
+            # Create application directory and .env file with secrets
             sudo mkdir -p ${{ env.SERVER_APP_DIR }}
-            echo "MINIO_ROOT_USER=${MINIO_ROOT_USER}" | sudo tee ${{ env.SERVER_APP_DIR }}/.env > /dev/null
-            echo "MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD}" | sudo tee -a ${{ env.SERVER_APP_DIR }}/.env > /dev/null
-            echo "MINIO_BUCKET_NAME=${MINIO_BUCKET_NAME}" | sudo tee -a ${{ env.SERVER_APP_DIR }}/.env > /dev/null
-            echo "FLASK_ENV=production" | sudo tee -a ${{ env.SERVER_APP_DIR }}/.env > /dev/null
+            {
+              echo "OCI_ENDPOINT_URL=${OCI_ENDPOINT_URL}"
+              echo "OCI_REGION=${OCI_REGION}"
+              echo "OCI_ACCESS_KEY_ID=${OCI_ACCESS_KEY_ID}"
+              echo "OCI_SECRET_ACCESS_KEY=${OCI_SECRET_ACCESS_KEY}"
+              echo "OCI_BUCKET_NAME=${OCI_BUCKET_NAME}"
+              echo "FLASK_ENV=production"
+            } | sudo tee ${{ env.SERVER_APP_DIR }}/.env > /dev/null
             sudo chmod 600 ${{ env.SERVER_APP_DIR }}/.env
 
-            # Decode the base64 content and write the compose file. This is the safest method.
+            # Decode the base64 content and write the compose file
             echo "${COMPOSE_FILE_B64}" | base64 -d | sudo tee ${{ env.SERVER_APP_DIR }}/docker-compose.yml > /dev/null
 
+            # Log in to GitHub Container Registry and pull the new image
             echo "${GHCR_PULL_TOKEN}" | sudo docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
-
             cd ${{ env.SERVER_APP_DIR }}
             sudo docker compose pull
 
+            # Create or update the systemd service file
             echo "[Unit]" | sudo tee /etc/systemd/system/${{ env.SERVICE_NAME }}
             echo "Description=Portfolio App Service" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
             echo "Requires=docker.service" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
@@ -155,10 +141,12 @@ jobs:
             echo "[Install]" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
             echo "WantedBy=multi-user.target" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
 
+            # Reload, enable, and restart the service
             sudo systemctl daemon-reload
             sudo systemctl enable ${{ env.SERVICE_NAME }}
             sudo systemctl restart ${{ env.SERVICE_NAME }}
 
+            # Clean up old Docker images
             sudo docker image prune -f
 
             echo "Deployment finished successfully."

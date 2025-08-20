@@ -6,41 +6,31 @@ from botocore.client import Config as BotocoreConfig
 from botocore.exceptions import ClientError
 from app.config import Config
 
-minio_client = None
+s3_client = None
 
 def create_app():
     """Application factory function."""
     app = Flask(__name__)
     app.config.from_object(Config)
 
-    # Initialize MinIO client
-    global minio_client
-    minio_client = boto3.client(
+    # Initialize the S3 client to connect to OCI
+    global s3_client
+    s3_client = boto3.client(
         's3',
-        endpoint_url=f"http://{app.config['MINIO_ENDPOINT']}",
-        aws_access_key_id=app.config['MINIO_ACCESS_KEY'],
-        aws_secret_access_key=app.config['MINIO_SECRET_KEY'],
+        endpoint_url=app.config['OCI_ENDPOINT_URL'],
+        aws_access_key_id=app.config['OCI_ACCESS_KEY_ID'],
+        aws_secret_access_key=app.config['OCI_SECRET_ACCESS_KEY'],
         config=BotocoreConfig(signature_version='s3v4'),
-        region_name='us-east-1'
+        region_name=app.config['OCI_REGION']
     )
-
-    with app.app_context():
-        # Ensure the bucket exists, create it if it doesn't
-        try:
-            minio_client.head_bucket(Bucket=app.config['MINIO_BUCKET_NAME'])
-        except ClientError as e:
-            if e.response['Error']['Code'] == '404':
-                minio_client.create_bucket(Bucket=app.config['MINIO_BUCKET_NAME'])
-                # Set a public read policy for the bucket
-                policy = f'{{"Version":"2012-10-17","Statement":[{{"Effect":"Allow","Principal":"*","Action":["s3:GetObject"],"Resource":["arn:aws:s3:::{app.config["MINIO_BUCKET_NAME"]}/*"]}}]}}'
-                minio_client.put_bucket_policy(Bucket=app.config['MINIO_BUCKET_NAME'], Policy=policy)
-            else:
-                raise
+    
+    # In a production setup, the bucket is expected to be created and managed
+    # outside the application's lifecycle (e.g., via the cloud console or Terraform).
+    # This application assumes the bucket specified in the .env file already exists.
 
     @app.route('/')
     def index():
         """Render the main portfolio page."""
-        # Pass portfolio content from config to the template
         content = {
             'title': app.config['PORTFOLIO_TITLE'],
             'meta_description': app.config['PORTFOLIO_META_DESCRIPTION'],
@@ -56,18 +46,21 @@ def create_app():
     def get_photos():
         """API endpoint to get a randomized list of photo URLs."""
         try:
-            paginator = minio_client.get_paginator('list_objects_v2')
-            pages = paginator.paginate(Bucket=app.config['MINIO_BUCKET_NAME'])
+            bucket_name = app.config['OCI_BUCKET_NAME']
+            
+            # Use a paginator to handle buckets with many objects
+            paginator = s3_client.get_paginator('list_objects_v2')
+            pages = paginator.paginate(Bucket=bucket_name)
             
             photo_urls = []
             for page in pages:
                 if "Contents" in page:
                     for obj in page['Contents']:
-                        # Generate a presigned URL for each object
-                        # These URLs grant temporary access to the private objects
-                        url = minio_client.generate_presigned_url(
+                        # Generate a presigned URL for each object.
+                        # These URLs grant secure, temporary access to private objects.
+                        url = s3_client.generate_presigned_url(
                             'get_object',
-                            Params={'Bucket': app.config['MINIO_BUCKET_NAME'], 'Key': obj['Key']},
+                            Params={'Bucket': bucket_name, 'Key': obj['Key']},
                             ExpiresIn=3600  # URL is valid for 1 hour
                         )
                         photo_urls.append(url)
@@ -76,7 +69,16 @@ def create_app():
             return jsonify(photo_urls)
             
         except ClientError as e:
-            print(f"Error connecting to MinIO: {e}")
-            return jsonify({"error": "Could not retrieve photos"}), 500
+            # Provide more specific error feedback
+            error_code = e.response.get("Error", {}).get("Code")
+            if error_code == 'NoSuchBucket':
+                print(f"Error: The bucket '{bucket_name}' does not exist.")
+                return jsonify({"error": f"The configured bucket '{bucket_name}' was not found."}), 500
+            
+            print(f"An S3 client error occurred: {e}")
+            return jsonify({"error": "Could not retrieve photos from cloud storage."}), 500
+        except Exception as e:
+            print(f"An unexpected error occurred: {e}")
+            return jsonify({"error": "An internal server error occurred."}), 500
 
     return app

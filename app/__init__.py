@@ -70,10 +70,19 @@ def create_app():
             
         except ClientError as e:
             # Provide more specific error feedback
+            bucket_name = app.config.get('OCI_BUCKET_NAME')
+            endpoint_url = app.config.get('OCI_ENDPOINT_URL')
+            region = app.config.get('OCI_REGION')
+            
+            print("--- OCI Client Error ---")
+            print(f"Failed to access bucket '{bucket_name}'")
+            print(f"Endpoint URL used: {endpoint_url}")
+            print(f"Region used: {region}")
+            
             error_code = e.response.get("Error", {}).get("Code")
             if error_code == 'NoSuchBucket':
-                print(f"Error: The bucket '{bucket_name}' does not exist.")
-                return jsonify({"error": f"The configured bucket '{bucket_name}' was not found."}), 500
+                print(f"Error Details: The bucket '{bucket_name}' does not exist in the region '{region}' accessible via the specified endpoint.")
+                return jsonify({"error": f"Configuration error: The bucket '{bucket_name}' was not found."}), 500
             
             print(f"An S3 client error occurred: {e}")
             return jsonify({"error": "Could not retrieve photos from cloud storage."}), 500

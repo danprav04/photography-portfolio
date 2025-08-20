@@ -69,10 +69,10 @@ jobs:
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-      - name: Prepare Compose File Content
-        id: prepare-compose
+      - name: Prepare Deployment Files
+        id: prepare-files
         run: |
-          # Read the multi-line YAML and base64 encode it for safe transmission.
+          # Prepare docker-compose file and base64 encode it
           COMPOSE_CONTENT_B64=$(cat <<EOF | base64 -w 0
           version: "3.8"
           services:
@@ -91,6 +91,66 @@ jobs:
           EOF
           )
           echo "compose_file_b64=${COMPOSE_CONTENT_B64}" >> $GITHUB_OUTPUT
+
+          # Prepare Python OCI connection check script and base64 encode it
+          CHECK_SCRIPT_B64=$(cat <<'EOF' | base64 -w 0
+          import os
+          import boto3
+          from botocore.exceptions import ClientError, NoCredentialsError
+
+          def check_oci_connection():
+              """Checks the connection to OCI Object Storage and validates the bucket."""
+              bucket_name = os.getenv('OCI_BUCKET_NAME')
+              endpoint_url = os.getenv('OCI_ENDPOINT_URL')
+              region = os.getenv('OCI_REGION')
+              access_key = os.getenv('OCI_ACCESS_KEY_ID')
+              
+              print("--- OCI Connection Check ---")
+              print(f"Endpoint URL: {endpoint_url}")
+              print(f"Region: {region}")
+              print(f"Bucket Name: {bucket_name}")
+              print(f"Access Key ID: {access_key}")
+              
+              if not all([bucket_name, endpoint_url, region, access_key, os.getenv('OCI_SECRET_ACCESS_KEY')]):
+                  print("\n[ERROR] One or more required OCI environment variables are not set.")
+                  exit(1)
+              
+              try:
+                  s3_client = boto3.client(
+                      's3',
+                      endpoint_url=endpoint_url,
+                      aws_access_key_id=access_key,
+                      aws_secret_access_key=os.getenv('OCI_SECRET_ACCESS_KEY'),
+                      region_name=region
+                  )
+                  
+                  print("\nAttempting to connect and verify bucket...")
+                  s3_client.head_bucket(Bucket=bucket_name)
+                  print("\n[SUCCESS] Connection successful and bucket exists.")
+                  print("----------------------------")
+              
+              except NoCredentialsError:
+                  print("\n[ERROR] Credentials not found. Ensure OCI_ACCESS_KEY_ID and OCI_SECRET_ACCESS_KEY are set.")
+                  exit(1)
+              except ClientError as e:
+                  error_code = e.response.get("Error", {}).get("Code")
+                  print(f"\n[ERROR] A client error occurred: {error_code}")
+                  if error_code == '404':
+                      print(f"  - The bucket '{bucket_name}' was not found at the specified endpoint and region.")
+                  elif error_code == '403':
+                      print("  - Access denied. Check IAM policies and credentials.")
+                  else:
+                      print(f"  - Details: {e}")
+                  exit(1)
+              except Exception as e:
+                  print(f"\n[ERROR] An unexpected error occurred: {e}")
+                  exit(1)
+
+          if __name__ == '__main__':
+              check_oci_connection()
+          EOF
+          )
+          echo "check_script_b64=${CHECK_SCRIPT_B64}" >> $GITHUB_OUTPUT
       - name: Deploy via SSH
         env:
           TARGET_SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -103,13 +163,38 @@ jobs:
           OCI_ACCESS_KEY_ID: ${{ secrets.OCI_ACCESS_KEY_ID }}
           OCI_SECRET_ACCESS_KEY: ${{ secrets.OCI_SECRET_ACCESS_KEY }}
           OCI_BUCKET_NAME: ${{ secrets.OCI_BUCKET_NAME }}
-          COMPOSE_FILE_B64: ${{ steps.prepare-compose.outputs.compose_file_b64 }}
+          # --- Base64 Encoded Files ---
+          COMPOSE_FILE_B64: ${{ steps.prepare-files.outputs.compose_file_b64 }}
+          CHECK_SCRIPT_B64: ${{ steps.prepare-files.outputs.check_script_b64 }}
         run: |
           ssh-keyscan -H "${TARGET_SSH_HOST}" >> ~/.ssh/known_hosts
           ssh -o StrictHostKeyChecking=no "${TARGET_SSH_USER}@${TARGET_SSH_HOST}" << EOF
             set -ex
 
-            # Create application directory and .env file with OCI secrets
+            # --- 1. Debugging: Display configuration (secrets are masked by GitHub Actions) ---
+            echo "### Starting Deployment ###"
+            echo "Server App Directory: ${{ env.SERVER_APP_DIR }}"
+            echo "Service Name: ${{ env.SERVICE_NAME }}"
+            echo "OCI Endpoint URL: ${{ env.OCI_ENDPOINT_URL }}"
+            echo "OCI Region: ${{ env.OCI_REGION }}"
+            echo "OCI Bucket Name: ${{ env.OCI_BUCKET_NAME }}"
+
+            # --- 2. Pre-flight Check: Verify OCI Connection ---
+            sudo apt-get update && sudo apt-get install -y python3-pip
+            sudo pip3 install boto3
+            echo "${CHECK_SCRIPT_B64}" | base64 -d > /tmp/check_oci.py
+            
+            # Export secrets for the check script to use
+            export OCI_ENDPOINT_URL="${OCI_ENDPOINT_URL}"
+            export OCI_REGION="${OCI_REGION}"
+            export OCI_ACCESS_KEY_ID="${OCI_ACCESS_KEY_ID}"
+            export OCI_SECRET_ACCESS_KEY="${OCI_SECRET_ACCESS_KEY}"
+            export OCI_BUCKET_NAME="${OCI_BUCKET_NAME}"
+            
+            python3 /tmp/check_oci.py
+            rm /tmp/check_oci.py
+
+            # --- 3. Prepare Server Environment ---
             sudo mkdir -p ${{ env.SERVER_APP_DIR }}
             {
               echo "OCI_ENDPOINT_URL=${OCI_ENDPOINT_URL}"
@@ -124,12 +209,12 @@ jobs:
             # Decode the base64 content and write the compose file
             echo "${COMPOSE_FILE_B64}" | base64 -d | sudo tee ${{ env.SERVER_APP_DIR }}/docker-compose.yml > /dev/null
 
-            # Log in to GitHub Container Registry and pull the new image
+            # --- 4. Pull New Image ---
             echo "${GHCR_PULL_TOKEN}" | sudo docker login ghcr.io -u "${GHCR_USERNAME}" --password-stdin
             cd ${{ env.SERVER_APP_DIR }}
             sudo docker compose pull
 
-            # Create or update the systemd service file
+            # --- 5. Create/Update and Restart Systemd Service ---
             echo "[Unit]" | sudo tee /etc/systemd/system/${{ env.SERVICE_NAME }}
             echo "Description=Portfolio App Service" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
             echo "Requires=docker.service" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
@@ -142,14 +227,13 @@ jobs:
             echo "[Install]" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
             echo "WantedBy=multi-user.target" | sudo tee -a /etc/systemd/system/${{ env.SERVICE_NAME }}
 
-            # Reload, enable, and restart the service
             sudo systemctl daemon-reload
             sudo systemctl enable ${{ env.SERVICE_NAME }}
             sudo systemctl restart ${{ env.SERVICE_NAME }}
 
-            # Clean up old Docker images
+            # --- 6. Clean up ---
             sudo docker image prune -f
 
-            echo "Deployment finished successfully."
+            echo "### Deployment finished successfully. ###"
           EOF
         shell: bash

@@ -97,6 +97,7 @@ jobs:
           TARGET_SSH_USER: ${{ secrets.SSH_USER }}
           GHCR_PULL_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
           GHCR_USERNAME: ${{ github.repository_owner }}
+          # --- OCI Secrets ---
           OCI_ENDPOINT_URL: ${{ secrets.OCI_ENDPOINT_URL }}
           OCI_REGION: ${{ secrets.OCI_REGION }}
           OCI_ACCESS_KEY_ID: ${{ secrets.OCI_ACCESS_KEY_ID }}
@@ -108,7 +109,7 @@ jobs:
           ssh -o StrictHostKeyChecking=no "${TARGET_SSH_USER}@${TARGET_SSH_HOST}" << EOF
             set -ex
 
-            # Create application directory and .env file with secrets
+            # Create application directory and .env file with OCI secrets
             sudo mkdir -p ${{ env.SERVER_APP_DIR }}
             {
               echo "OCI_ENDPOINT_URL=${OCI_ENDPOINT_URL}"

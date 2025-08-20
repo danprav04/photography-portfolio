@@ -11,28 +11,6 @@ services:
       - "8000:8000"
     networks:
       - portfolio-net
-    depends_on:
-      - minio
-    command: gunicorn --bind 0.0.0.0:8000 "app:create_app()"
-
-  minio:
-    image: quay.io/minio/minio:RELEASE.2025-07-23T15-54-02Z
-    container_name: minio-server
-    restart: unless-stopped
-    env_file:
-      - .env
-    ports:
-      - "9000:9000"  # API Port
-      - "9001:9001"  # Console Port
-    volumes:
-      - minio-data:/data
-    networks:
-      - portfolio-net
-    command: server /data --console-address ":9001"
-
-volumes:
-  minio-data:
-    driver: local
 
 networks:
   portfolio-net:

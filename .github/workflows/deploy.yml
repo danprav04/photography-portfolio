@@ -90,7 +90,7 @@ jobs:
                 - minio
               command: gunicorn --bind 0.0.0.0:8000 "app:create_app()"
             minio:
-              image: minio/minio:RELEASE.2025-07-19T08-38-46Z
+              image: minio/minio:RELEASE.2024-07-25T09-32-18Z
               container_name: minio-server
               restart: unless-stopped
               env_file: .env

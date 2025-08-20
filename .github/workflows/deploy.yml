@@ -180,8 +180,8 @@ jobs:
             echo "OCI Bucket Name: ${{ env.OCI_BUCKET_NAME }}"
 
             # --- 2. Pre-flight Check: Verify OCI Connection ---
-            sudo apt-get update && sudo apt-get install -y python3-pip
-            sudo pip3 install boto3
+            sudo apt-get update
+            sudo apt-get install -y python3-boto3
             echo "${CHECK_SCRIPT_B64}" | base64 -d > /tmp/check_oci.py
             
             # Export secrets for the check script to use

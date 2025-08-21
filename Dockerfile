@@ -32,6 +32,6 @@ RUN mkdir -p /app/cache/thumbnails
 EXPOSE 8000
 
 # Stage 8: The command to run the application
-# Use /bin/sh -c to ensure environment variables like ${GUNICORN_WORKERS} are expanded.
-# The app module (app:create_app()) does not need to be quoted.
-CMD ["/bin/sh", "-c", "exec gunicorn --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS} --worker-class gevent --timeout 90 app:create_app()"]
+# Use /bin/sh -c for variable expansion.
+# Single-quote 'app:create_app()' to prevent the shell from interpreting the parentheses.
+CMD ["/bin/sh", "-c", "exec gunicorn --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS} --worker-class gevent --timeout 90 'app:create_app()'"]

@@ -18,29 +18,28 @@ document.addEventListener('DOMContentLoaded', () => {
     const CACHE_KEY_DATA = 'galleryData';
 
     /**
-     * Progressively loads an image. Starts with a thumbnail, then fades in the full-res image.
-     * @param {HTMLImageElement} imgElement The image element to load.
-     * @param {string} thumbnailUrl The URL for the low-resolution thumbnail.
-     * @param {string} fullUrl The URL for the full-resolution image.
+     * Iterates through all images marked for lazy loading and replaces their
+     * thumbnail source with the full-resolution source.
      */
-    function progressiveLoad(imgElement, thumbnailUrl, fullUrl) {
-        // 1. Set the source to the thumbnail first
-        imgElement.src = thumbnailUrl;
-
-        // 2. Once the thumbnail is loaded, start loading the full image in the background
-        imgElement.addEventListener('load', () => {
-            const fullImage = new Image();
-            fullImage.src = fullUrl;
-            fullImage.onload = () => {
-                // 3. When the full image is loaded, replace the src and add a class for the fade-in effect
-                imgElement.src = fullUrl;
-                imgElement.classList.add('lazy-loaded');
-            };
-        }, { once: true }); // Ensure this listener only runs once per image
+    function loadFullResolutionImages() {
+        const imagesToLoad = document.querySelectorAll('img[data-full-src]');
+        imagesToLoad.forEach(imgElement => {
+            const fullSrc = imgElement.dataset.fullSrc;
+            if (fullSrc) {
+                const fullImage = new Image();
+                fullImage.src = fullSrc;
+                fullImage.onload = () => {
+                    imgElement.src = fullSrc;
+                    imgElement.classList.add('lazy-loaded');
+                    // Clean up the data attribute after use
+                    imgElement.removeAttribute('data-full-src'); 
+                };
+            }
+        });
     }
 
     /**
-     * Renders the hero carousel with featured photos using progressive loading.
+     * Renders the hero carousel with featured photo thumbnails.
      * @param {object[]} featuredPhotos - Array of photo objects.
      */
     function renderCarousel(featuredPhotos) {
@@ -55,13 +54,13 @@ document.addEventListener('DOMContentLoaded', () => {
         featuredPhotos.forEach((photo, index) => {
             const slide = document.createElement('div');
             slide.className = 'carousel-slide';
-            // Set the blurred background using the thumbnail
             slide.style.backgroundImage = `url(${photo.thumbnail_url})`;
 
             const img = document.createElement('img');
             img.alt = `Featured Image ${index + 1}`;
-            
-            progressiveLoad(img, photo.thumbnail_url, photo.full_url);
+            // Set thumbnail src immediately and store full-res src in a data attribute
+            img.src = photo.thumbnail_url;
+            img.dataset.fullSrc = photo.full_url;
             
             img.addEventListener('click', () => openLightbox(photo.full_url));
             slide.appendChild(img);
@@ -86,7 +85,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /**
-     * Renders photos in the gallery's masonry grid using progressive loading.
+     * Renders the gallery grid with photo thumbnails.
      * @param {object[]} galleryPhotos - An array of photo objects.
      */
     function renderGallery(galleryPhotos) {
@@ -103,8 +102,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const img = document.createElement('img');
             img.alt = 'Portfolio Image';
-            
-            progressiveLoad(img, photo.thumbnail_url, photo.full_url);
+            // Set thumbnail src immediately and store full-res src in a data attribute
+            img.src = photo.thumbnail_url;
+            img.dataset.fullSrc = photo.full_url;
             
             img.addEventListener('click', () => openLightbox(photo.full_url));
 
@@ -131,8 +131,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.log("New data fetched and cached successfully.");
             }
 
+            // Phase 1: Render everything with thumbnails
             renderCarousel(data.featured);
             renderGallery(data.gallery);
+            // Phase 2: Start loading full resolution images in the background
+            loadFullResolutionImages();
 
         } catch (error) {
             console.error("Could not fetch photos:", error);
@@ -157,20 +160,25 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
             const currentETag = response.headers.get('ETag');
+            const data = JSON.parse(cachedDataJSON);
+
+            // Phase 1: Render from cache with thumbnails first, regardless of ETag
+            renderCarousel(data.featured);
+            renderGallery(data.gallery);
 
             if (currentETag === cachedETag) {
-                console.log("Cache is valid. Rendering from localStorage.");
-                const data = JSON.parse(cachedDataJSON);
-                renderCarousel(data.featured);
-                renderGallery(data.gallery);
+                console.log("Cache is valid. Loading full-res images from cache data.");
+                // Phase 2: Load full-res images using cached URLs
+                loadFullResolutionImages();
             } else {
+                // ETag is stale, fetch new data in the background
                 await fetchAndCachePhotos();
             }
         } catch (error) {
             console.error("Failed to validate cache, falling back to cached version.", error);
             const data = JSON.parse(cachedDataJSON);
-            renderCarousel(data.featured);
-            renderGallery(data.gallery);
+            // Phase 1 is already rendered, so just start Phase 2 with stale data
+            loadFullResolutionImages();
         }
     }
 
@@ -190,6 +198,7 @@ document.addEventListener('DOMContentLoaded', () => {
             moveToSlide(nextIndex);
         }, 5000);
     };
+
 
     const resetSlideInterval = () => {
         clearInterval(slideInterval);

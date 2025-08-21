@@ -25,8 +25,9 @@ RUN apt-get update && \
 COPY ./app /app/app
 COPY portfolio_config.json .
 
-# Stage 6: Create a directory for the thumbnail cache
-RUN mkdir -p /app/cache/thumbnails
+# Stage 6: Create directories for the thumbnail and API caches
+RUN mkdir -p /app/cache/thumbnails && \
+    mkdir -p /app/cache/api
 
 # Stage 7: Expose the port the app runs on
 EXPOSE 8000

@@ -2,6 +2,8 @@ import os
 import re
 import hashlib
 import random
+import time
+import json
 from datetime import datetime
 from flask import Flask, render_template, jsonify, request, make_response, send_from_directory, url_for
 import boto3
@@ -9,19 +11,17 @@ from botocore.client import Config as BotocoreConfig
 from botocore.exceptions import ClientError
 from app.config import Config
 from PIL import Image
-import time
 
 s3_client = None
-THUMBNAIL_CACHE_DIR = os.path.join(os.path.dirname(__file__), '..', 'cache', 'thumbnails')
+
+# --- Cache Configuration ---
+CACHE_BASE_DIR = os.path.join(os.path.dirname(__file__), '..', 'cache')
+THUMBNAIL_CACHE_DIR = os.path.join(CACHE_BASE_DIR, 'thumbnails')
+API_CACHE_DIR = os.path.join(CACHE_BASE_DIR, 'api')
+API_CACHE_FILE = os.path.join(API_CACHE_DIR, 'gallery_cache.json')
+CACHE_EXPIRATION_SECONDS = 60
 THUMBNAIL_MAX_WIDTH = 400
 
-# In-memory cache for the S3 object list to reduce API calls
-s3_object_cache = {
-    'objects': [],
-    'etag': None,
-    'timestamp': 0
-}
-CACHE_EXPIRATION_SECONDS = 60
 
 def _get_datetime_from_key(object_key):
     """
@@ -41,7 +41,8 @@ def _calculate_gallery_etag(objects):
     """
     if not objects:
         return None
-    etags = [obj['ETag'] for obj in objects]
+    # ETag from S3 already includes quotes, so we use them as is.
+    etags = [obj.get('ETag', '') for obj in objects]
     concatenated_etags = "".join(etags)
     return f'"{hashlib.sha256(concatenated_etags.encode("utf-8")).hexdigest()}"'
 
@@ -50,7 +51,9 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
 
+    # Ensure all required cache directories exist
     os.makedirs(THUMBNAIL_CACHE_DIR, exist_ok=True)
+    os.makedirs(API_CACHE_DIR, exist_ok=True)
 
     global s3_client
     s3_client = boto3.client(
@@ -79,18 +82,25 @@ def create_app():
     @app.route('/api/photos', methods=['GET', 'HEAD'])
     def get_photos():
         """
-        API endpoint for the complete, cacheable list of all photos, sorted chronologically.
-        Uses a short-lived in-memory cache to avoid hitting OCI on every request.
+        API endpoint for the photo list. Uses a file-based cache to avoid
+        hitting OCI on every request.
         """
         try:
-            # Check if the in-memory cache is still valid
-            cache_is_valid = (time.time() - s3_object_cache['timestamp']) < CACHE_EXPIRATION_SECONDS
+            cache_is_valid = False
+            if os.path.exists(API_CACHE_FILE):
+                # Check if the cache file is recent enough
+                modification_time = os.path.getmtime(API_CACHE_FILE)
+                if (time.time() - modification_time) < CACHE_EXPIRATION_SECONDS:
+                    cache_is_valid = True
             
-            if cache_is_valid and s3_object_cache['objects']:
-                sorted_objects = s3_object_cache['objects']
-                current_etag = s3_object_cache['etag']
+            if cache_is_valid:
+                # Load object list and ETag from the file cache
+                with open(API_CACHE_FILE, 'r') as f:
+                    cached_data = json.load(f)
+                sorted_objects = cached_data['objects']
+                current_etag = cached_data['etag']
             else:
-                # Cache is invalid or empty, fetch from OCI
+                # Cache is invalid or missing, fetch fresh from OCI
                 bucket_name = app.config['OCI_BUCKET_NAME']
                 paginator = s3_client.get_paginator('list_objects_v2')
                 pages = paginator.paginate(Bucket=bucket_name)
@@ -100,17 +110,24 @@ def create_app():
                     if "Contents" in page:
                         all_objects.extend(page['Contents'])
                 
+                # Convert datetime objects to strings for JSON serialization
+                for obj in all_objects:
+                    obj['LastModified'] = obj['LastModified'].isoformat()
+                
                 sorted_objects = sorted(all_objects, key=lambda obj: _get_datetime_from_key(obj['Key']), reverse=True)
                 current_etag = _calculate_gallery_etag(sorted_objects)
 
-                # Update the cache
-                s3_object_cache['objects'] = sorted_objects
-                s3_object_cache['etag'] = current_etag
-                s3_object_cache['timestamp'] = time.time()
+                # Write the fresh data to the cache file atomically
+                cache_payload = {'etag': current_etag, 'objects': sorted_objects}
+                temp_file_path = API_CACHE_FILE + f".tmp-{os.getpid()}"
+                with open(temp_file_path, 'w') as f:
+                    json.dump(cache_payload, f)
+                os.rename(temp_file_path, API_CACHE_FILE)
 
-            if current_etag is None:
+            if not current_etag:
                 return jsonify([])
 
+            # Standard cache validation with the client
             if_none_match = request.headers.get('If-None-Match')
             if if_none_match and if_none_match == current_etag:
                 return make_response(), 304
@@ -118,9 +135,10 @@ def create_app():
             if request.method == 'HEAD':
                 response = make_response()
                 response.headers['ETag'] = current_etag
-                response.headers['Cache-Control'] = 'public, max-age=60'
+                response.headers['Cache-Control'] = f'public, max-age={CACHE_EXPIRATION_SECONDS}'
                 return response
 
+            # Generate response with fresh presigned URLs
             photo_data = []
             for obj in sorted_objects:
                 key = obj['Key']
@@ -132,7 +150,7 @@ def create_app():
             
             response = make_response(jsonify(photo_data))
             response.headers['ETag'] = current_etag
-            response.headers['Cache-Control'] = 'public, max-age=60'
+            response.headers['Cache-Control'] = f'public, max-age={CACHE_EXPIRATION_SECONDS}'
             return response
             
         except ClientError as e:

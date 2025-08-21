@@ -61,6 +61,11 @@
     <div id="lightbox" class="lightbox">
         <span class="lightbox-close">&times;</span>
         <img class="lightbox-content" id="lightbox-img">
+        <div class="lightbox-controls">
+            <button id="zoom-in-btn" title="Zoom In">+</button>
+            <button id="zoom-out-btn" title="Zoom Out">-</button>
+            <button id="zoom-reset-btn" title="Reset Zoom">&#10227;</button>
+        </div>
     </div>
 
     <script src="{{ url_for('static', filename='js/main.js') }}"></script>

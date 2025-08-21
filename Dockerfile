@@ -33,5 +33,5 @@ EXPOSE 8000
 
 # Stage 8: The command to run the application
 # Use /bin/sh -c to ensure environment variables like ${GUNICORN_WORKERS} are expanded.
-# Use exec to make gunicorn the container's PID 1 for proper signal handling.
-CMD ["/bin/sh", "-c", "exec gunicorn --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS} --worker-class gevent --timeout 90 \"app:create_app()\""]```
+# The app module (app:create_app()) does not need to be quoted.
+CMD ["/bin/sh", "-c", "exec gunicorn --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS} --worker-class gevent --timeout 90 app:create_app()"]

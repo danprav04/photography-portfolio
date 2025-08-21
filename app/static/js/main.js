@@ -18,7 +18,29 @@ document.addEventListener('DOMContentLoaded', () => {
     const CACHE_KEY_DATA = 'galleryData';
 
     /**
-     * Renders the hero carousel with featured photos.
+     * Progressively loads an image. Starts with a thumbnail, then fades in the full-res image.
+     * @param {HTMLImageElement} imgElement The image element to load.
+     * @param {string} thumbnailUrl The URL for the low-resolution thumbnail.
+     * @param {string} fullUrl The URL for the full-resolution image.
+     */
+    function progressiveLoad(imgElement, thumbnailUrl, fullUrl) {
+        // 1. Set the source to the thumbnail first
+        imgElement.src = thumbnailUrl;
+
+        // 2. Once the thumbnail is loaded, start loading the full image in the background
+        imgElement.addEventListener('load', () => {
+            const fullImage = new Image();
+            fullImage.src = fullUrl;
+            fullImage.onload = () => {
+                // 3. When the full image is loaded, replace the src and add a class for the fade-in effect
+                imgElement.src = fullUrl;
+                imgElement.classList.add('lazy-loaded');
+            };
+        }, { once: true }); // Ensure this listener only runs once per image
+    }
+
+    /**
+     * Renders the hero carousel with featured photos using progressive loading.
      * @param {object[]} featuredPhotos - Array of photo objects.
      */
     function renderCarousel(featuredPhotos) {
@@ -31,18 +53,20 @@ document.addEventListener('DOMContentLoaded', () => {
         carouselNav.innerHTML = '';
 
         featuredPhotos.forEach((photo, index) => {
-            // Create slide
             const slide = document.createElement('div');
             slide.className = 'carousel-slide';
+            // Set the blurred background using the thumbnail
+            slide.style.backgroundImage = `url(${photo.thumbnail_url})`;
+
             const img = document.createElement('img');
-            img.src = photo.thumbnail_url;
             img.alt = `Featured Image ${index + 1}`;
-            img.loading = 'lazy';
+            
+            progressiveLoad(img, photo.thumbnail_url, photo.full_url);
+            
             img.addEventListener('click', () => openLightbox(photo.full_url));
             slide.appendChild(img);
             carouselTrack.appendChild(slide);
 
-            // Create indicator dot
             const dot = document.createElement('button');
             dot.className = 'carousel-indicator';
             dot.addEventListener('click', () => {
@@ -62,11 +86,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /**
-     * Renders photos in the gallery's masonry grid.
+     * Renders photos in the gallery's masonry grid using progressive loading.
      * @param {object[]} galleryPhotos - An array of photo objects.
      */
     function renderGallery(galleryPhotos) {
-        galleryContainer.innerHTML = ''; // Clear the loading/status message
+        galleryContainer.innerHTML = '';
 
         if (!galleryPhotos || galleryPhotos.length === 0) {
             galleryContainer.innerHTML = '<p class="status-message">No photos found in the gallery.</p>';
@@ -78,12 +102,11 @@ document.addEventListener('DOMContentLoaded', () => {
             galleryItem.className = 'gallery-item';
 
             const img = document.createElement('img');
-            img.src = photo.thumbnail_url;
             img.alt = 'Portfolio Image';
-            img.loading = 'lazy';
-            img.dataset.fullSrc = photo.full_url;
-
-            img.addEventListener('click', () => openLightbox(img.dataset.fullSrc));
+            
+            progressiveLoad(img, photo.thumbnail_url, photo.full_url);
+            
+            img.addEventListener('click', () => openLightbox(photo.full_url));
 
             galleryItem.appendChild(img);
             galleryContainer.appendChild(galleryItem);
@@ -165,7 +188,7 @@ document.addEventListener('DOMContentLoaded', () => {
         slideInterval = setInterval(() => {
             const nextIndex = (currentSlide + 1) % slides.length;
             moveToSlide(nextIndex);
-        }, 5000); // Change slide every 5 seconds
+        }, 5000);
     };
 
     const resetSlideInterval = () => {
@@ -182,7 +205,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function closeLightbox() {
         lightbox.classList.remove('active');
-        lightboxImg.src = ''; // Clear src to stop loading
+        lightboxImg.src = '';
         document.body.style.overflow = 'auto';
     }
 
@@ -192,7 +215,6 @@ document.addEventListener('DOMContentLoaded', () => {
     async function init() {
         await validateCacheAndRender();
 
-        // Event listeners for closing the lightbox
         closeBtn.addEventListener('click', closeLightbox);
         lightbox.addEventListener('click', (e) => {
             if (e.target === lightbox) closeLightbox();
@@ -201,7 +223,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (e.key === 'Escape' && lightbox.classList.contains('active')) closeLightbox();
         });
 
-        // Event listeners for carousel navigation
         if (prevButton && nextButton) {
             prevButton.addEventListener('click', () => {
                 const prevIndex = (currentSlide - 1 + slides.length) % slides.length;

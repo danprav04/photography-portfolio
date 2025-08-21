@@ -14,8 +14,34 @@ let currentSlide = 0;
 let slideInterval;
 
 /**
+ * Shuffles an array in place and returns a new array containing the first `count` items.
+ * Uses the Fisher-Yates (aka Knuth) shuffle algorithm for an unbiased shuffle.
+ * @param {Array} array The array to shuffle.
+ * @param {number} count The number of items to return from the shuffled array.
+ * @returns {Array} A new array with `count` random items.
+ */
+function shuffleAndPick(array, count) {
+    const shuffled = [...array]; // Create a shallow copy to avoid modifying the original.
+    let currentIndex = shuffled.length;
+    let randomIndex;
+
+    // While there remain elements to shuffle.
+    while (currentIndex !== 0) {
+        // Pick a remaining element.
+        randomIndex = Math.floor(Math.random() * currentIndex);
+        currentIndex--;
+
+        // And swap it with the current element.
+        [shuffled[currentIndex], shuffled[randomIndex]] = [
+            shuffled[randomIndex], shuffled[currentIndex]];
+    }
+
+    return shuffled.slice(0, count);
+}
+
+
+/**
  * Kicks off the process of loading full-resolution images for all thumbnails.
- * Replaces low-res thumbnails with high-res images upon load.
  */
 function loadFullResolutionImages() {
     const imagesToLoad = document.querySelectorAll('img[data-full-src]');
@@ -127,8 +153,8 @@ function renderGallery(galleryPhotos) {
 const moveToSlide = (targetIndex) => {
     if (!carouselTrack || slides.length === 0) return;
     carouselTrack.style.transform = `translateX(-${targetIndex * 100}%)`;
-    dots[currentSlide].classList.remove('current-slide');
-    dots[targetIndex].classList.add('current-slide');
+    if(dots[currentSlide]) dots[currentSlide].classList.remove('current-slide');
+    if(dots[targetIndex]) dots[targetIndex].classList.add('current-slide');
     currentSlide = targetIndex;
 };
 const startSlideInterval = () => {
@@ -140,16 +166,26 @@ const resetSlideInterval = () => {
 };
 
 /**
- * Initializes all UI components, including the carousel and gallery.
- * @param {Array} featuredPhotos - Photos for the hero carousel.
- * @param {Array} galleryPhotos - All photos for the main gallery.
+ * Initializes all UI components. It randomizes featured photos from the main
+ * list before rendering the carousel and gallery.
+ * @param {Array} allPhotos - The complete, sorted list of photos from the API.
  */
-export function initUI(featuredPhotos, galleryPhotos) {
+export function initUI(allPhotos) {
+    // --- Randomization Logic ---
+    const totalPhotos = allPhotos.length;
+    const poolSize = Math.max(5, Math.floor(totalPhotos * 0.20));
+    const carouselPool = allPhotos.slice(0, poolSize);
+    const numFeatured = Math.min(5, carouselPool.length);
+    const featuredPhotos = shuffleAndPick(carouselPool, numFeatured);
+
+    // The gallery always shows all photos.
+    const galleryPhotos = allPhotos;
+    
+    // --- Rendering ---
     renderCarousel(featuredPhotos);
     renderGallery(galleryPhotos);
-    loadFullResolutionImages(); // Start loading full-res images after rendering thumbnails.
+    loadFullResolutionImages();
 
-    // Set up carousel button event listeners.
     if (prevButton && nextButton) {
         prevButton.addEventListener('click', () => {
             moveToSlide((currentSlide - 1 + slides.length) % slides.length);

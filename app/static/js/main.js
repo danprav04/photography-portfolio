@@ -4,64 +4,116 @@ document.addEventListener('DOMContentLoaded', () => {
     const lightboxImg = document.getElementById('lightbox-img');
     const closeBtn = document.querySelector('.lightbox-close');
 
+    // Carousel elements
+    const carouselTrack = document.querySelector('.carousel-track');
+    const carouselNav = document.querySelector('.carousel-nav');
+    const prevButton = document.querySelector('.carousel-button.prev');
+    const nextButton = document.querySelector('.carousel-button.next');
+    let slides = [];
+    let dots = [];
+    let currentSlide = 0;
+    let slideInterval;
+
     const CACHE_KEY_ETAG = 'galleryETag';
-    const CACHE_KEY_URLS = 'galleryPhotoURLs';
+    const CACHE_KEY_DATA = 'galleryData';
 
     /**
-     * Renders photos in the gallery's masonry grid.
-     * @param {string[]} photoUrls - An array of photo URLs.
+     * Renders the hero carousel with featured photos.
+     * @param {object[]} featuredPhotos - Array of photo objects.
      */
-    function renderGallery(photoUrls) {
-        // Clear the loading/status message
-        galleryContainer.innerHTML = '';
-
-        if (!photoUrls || photoUrls.length === 0) {
-            galleryContainer.innerHTML = '<p class="loader">No photos found in the gallery.</p>';
+    function renderCarousel(featuredPhotos) {
+        if (!carouselTrack || !featuredPhotos || featuredPhotos.length === 0) {
+            document.querySelector('.hero-carousel').style.display = 'none';
             return;
         }
 
-        photoUrls.forEach(url => {
+        carouselTrack.innerHTML = '';
+        carouselNav.innerHTML = '';
+
+        featuredPhotos.forEach((photo, index) => {
+            // Create slide
+            const slide = document.createElement('div');
+            slide.className = 'carousel-slide';
+            const img = document.createElement('img');
+            img.src = photo.thumbnail_url;
+            img.alt = `Featured Image ${index + 1}`;
+            img.loading = 'lazy';
+            img.addEventListener('click', () => openLightbox(photo.full_url));
+            slide.appendChild(img);
+            carouselTrack.appendChild(slide);
+
+            // Create indicator dot
+            const dot = document.createElement('button');
+            dot.className = 'carousel-indicator';
+            dot.addEventListener('click', () => {
+                moveToSlide(index);
+                resetSlideInterval();
+            });
+            carouselNav.appendChild(dot);
+        });
+
+        slides = Array.from(carouselTrack.children);
+        dots = Array.from(carouselNav.children);
+
+        if (slides.length > 0) {
+            moveToSlide(0);
+            startSlideInterval();
+        }
+    }
+
+    /**
+     * Renders photos in the gallery's masonry grid.
+     * @param {object[]} galleryPhotos - An array of photo objects.
+     */
+    function renderGallery(galleryPhotos) {
+        galleryContainer.innerHTML = ''; // Clear the loading/status message
+
+        if (!galleryPhotos || galleryPhotos.length === 0) {
+            galleryContainer.innerHTML = '<p class="status-message">No photos found in the gallery.</p>';
+            return;
+        }
+
+        galleryPhotos.forEach(photo => {
             const galleryItem = document.createElement('div');
             galleryItem.className = 'gallery-item';
 
             const img = document.createElement('img');
-            img.src = url;
+            img.src = photo.thumbnail_url;
             img.alt = 'Portfolio Image';
             img.loading = 'lazy';
+            img.dataset.fullSrc = photo.full_url;
 
-            img.addEventListener('click', () => openLightbox(url));
-            
+            img.addEventListener('click', () => openLightbox(img.dataset.fullSrc));
+
             galleryItem.appendChild(img);
             galleryContainer.appendChild(galleryItem);
         });
     }
 
     /**
-     * Fetches the latest photo list from the server and caches it.
+     * Fetches the latest photo data from the server and caches it.
      */
     async function fetchAndCachePhotos() {
         console.log("Cache miss or invalid. Fetching fresh data from server.");
         try {
             const response = await fetch('/api/photos');
-            
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
             const newETag = response.headers.get('ETag');
-            const photoUrls = await response.json();
+            const data = await response.json();
 
-            if (newETag && photoUrls) {
-                localStorage.setItem(CACHE_KEY_URLS, JSON.stringify(photoUrls));
+            if (newETag && data) {
+                localStorage.setItem(CACHE_KEY_DATA, JSON.stringify(data));
                 localStorage.setItem(CACHE_KEY_ETAG, newETag);
                 console.log("New data fetched and cached successfully.");
             }
-            
-            renderGallery(photoUrls);
+
+            renderCarousel(data.featured);
+            renderGallery(data.gallery);
 
         } catch (error) {
             console.error("Could not fetch photos:", error);
-            galleryContainer.innerHTML = '<p class="loader">Failed to load photos. Please try again later.</p>';
+            galleryContainer.innerHTML = '<p class="status-message">Failed to load photos. Please try again later.</p>';
         }
     }
 
@@ -70,54 +122,68 @@ document.addEventListener('DOMContentLoaded', () => {
      */
     async function validateCacheAndRender() {
         const cachedETag = localStorage.getItem(CACHE_KEY_ETAG);
-        const cachedUrlsJSON = localStorage.getItem(CACHE_KEY_URLS);
+        const cachedDataJSON = localStorage.getItem(CACHE_KEY_DATA);
 
-        if (!cachedETag || !cachedUrlsJSON) {
-            // No cache exists, perform a full fetch.
+        if (!cachedETag || !cachedDataJSON) {
             await fetchAndCachePhotos();
             return;
         }
 
         try {
-            // Use a HEAD request to get only headers, saving bandwidth
             const response = await fetch('/api/photos', { method: 'HEAD' });
-
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 
             const currentETag = response.headers.get('ETag');
 
             if (currentETag === cachedETag) {
-                // Cache is valid, render from localStorage
                 console.log("Cache is valid. Rendering from localStorage.");
-                renderGallery(JSON.parse(cachedUrlsJSON));
+                const data = JSON.parse(cachedDataJSON);
+                renderCarousel(data.featured);
+                renderGallery(data.gallery);
             } else {
-                // Cache is stale, fetch new data
                 await fetchAndCachePhotos();
             }
         } catch (error) {
             console.error("Failed to validate cache, falling back to cached version.", error);
-            // In case of network error during validation, render the stale cache as a fallback
-            renderGallery(JSON.parse(cachedUrlsJSON));
+            const data = JSON.parse(cachedDataJSON);
+            renderCarousel(data.featured);
+            renderGallery(data.gallery);
         }
     }
 
-    /**
-     * Opens the lightbox with the specified image URL.
-     * @param {string} url - The URL of the image to display.
-     */
+    // --- Carousel Logic ---
+    const moveToSlide = (targetIndex) => {
+        if (!carouselTrack || slides.length === 0) return;
+        carouselTrack.style.transform = `translateX(-${targetIndex * 100}%)`;
+        
+        dots[currentSlide].classList.remove('current-slide');
+        dots[targetIndex].classList.add('current-slide');
+        currentSlide = targetIndex;
+    };
+    
+    const startSlideInterval = () => {
+        slideInterval = setInterval(() => {
+            const nextIndex = (currentSlide + 1) % slides.length;
+            moveToSlide(nextIndex);
+        }, 5000); // Change slide every 5 seconds
+    };
+
+    const resetSlideInterval = () => {
+        clearInterval(slideInterval);
+        startSlideInterval();
+    };
+
+    // --- Lightbox Logic ---
     function openLightbox(url) {
         lightboxImg.src = url;
         lightbox.classList.add('active');
+        document.body.style.overflow = 'hidden';
     }
 
-    /**
-     * Closes the lightbox.
-     */
     function closeLightbox() {
         lightbox.classList.remove('active');
-        lightboxImg.src = ''; // Clear src to stop loading if in progress
+        lightboxImg.src = ''; // Clear src to stop loading
+        document.body.style.overflow = 'auto';
     }
 
     /**
@@ -129,18 +195,26 @@ document.addEventListener('DOMContentLoaded', () => {
         // Event listeners for closing the lightbox
         closeBtn.addEventListener('click', closeLightbox);
         lightbox.addEventListener('click', (e) => {
-            if (e.target === lightbox) {
-                closeLightbox();
-            }
+            if (e.target === lightbox) closeLightbox();
         });
-        
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && lightbox.classList.contains('active')) {
-                closeLightbox();
-            }
+            if (e.key === 'Escape' && lightbox.classList.contains('active')) closeLightbox();
         });
+
+        // Event listeners for carousel navigation
+        if (prevButton && nextButton) {
+            prevButton.addEventListener('click', () => {
+                const prevIndex = (currentSlide - 1 + slides.length) % slides.length;
+                moveToSlide(prevIndex);
+                resetSlideInterval();
+            });
+            nextButton.addEventListener('click', () => {
+                const nextIndex = (currentSlide + 1) % slides.length;
+                moveToSlide(nextIndex);
+                resetSlideInterval();
+            });
+        }
     }
 
-    // Start the application
     init();
 });

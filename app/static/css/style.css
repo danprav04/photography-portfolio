@@ -326,7 +326,9 @@ main {
     justify-content: center;
     align-items: center;
     backdrop-filter: blur(5px);
-    overflow: hidden; /* Prevent scrollbars when panning */
+    overflow: hidden;
+    /* Critical for preventing default browser gestures on mobile */
+    touch-action: none;
 }
 
 .lightbox.active {
@@ -339,7 +341,9 @@ main {
     object-fit: contain;
     animation: zoom-in-animation 0.3s ease-in-out;
     cursor: zoom-in;
-    transition: transform 0.2s ease-out; /* Smooth transitions for panning and zooming */
+    transition: transform 0.2s ease-out;
+    /* Also critical for gesture control */
+    touch-action: none;
 }
 
 .lightbox-content.zoomed {

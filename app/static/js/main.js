@@ -20,14 +20,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const CACHE_KEY_ETAG = 'galleryETag';
     const CACHE_KEY_DATA = 'galleryData';
 
-    // --- Lightbox Zoom & Pan State ---
-    let zoomState = {
+    // --- Lightbox Gesture State ---
+    const gestureState = {
         scale: 1,
         minScale: 1,
-        maxScale: 4,
+        maxScale: 5,
         isPanning: false,
         start: { x: 0, y: 0 },
-        translate: { x: 0, y: 0 }
+        translate: { x: 0, y: 0 },
+        initialPinchDist: 0,
     };
 
     /**
@@ -50,7 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
             };
         });
     }
-    
+
     /**
      * Renders the hero carousel with thumbnails and loading indicators.
      */
@@ -121,10 +122,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const spinner = document.createElement('div');
             spinner.className = 'loader-spinner';
-            
+
             galleryItem.append(img, spinner);
             galleryContainer.appendChild(galleryItem);
-            
+
             img.addEventListener('click', () => {
                 if (!galleryItem.classList.contains('loading')) {
                     openLightbox(photo.full_url);
@@ -161,7 +162,9 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         try {
-            const response = await fetch('/api/photos', { method: 'HEAD' });
+            const response = await fetch('/api/photos', {
+                method: 'HEAD'
+            });
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             const currentETag = response.headers.get('ETag');
             const data = JSON.parse(cachedDataJSON);
@@ -198,97 +201,157 @@ document.addEventListener('DOMContentLoaded', () => {
         startSlideInterval();
     };
 
-    // --- Lightbox Logic ---
+    // --- Lightbox Gesture and Zoom Logic ---
     function updateImageTransform() {
-        lightboxImg.style.transform = `translate(${zoomState.translate.x}px, ${zoomState.translate.y}px) scale(${zoomState.scale})`;
-    }
-    
-    function adjustZoom(amount) {
-        zoomState.scale = Math.max(zoomState.minScale, Math.min(zoomState.maxScale, zoomState.scale + amount));
-        if (zoomState.scale === zoomState.minScale) {
-            zoomState.translate = { x: 0, y: 0 };
-            lightboxImg.classList.remove('zoomed');
-        } else {
-            lightboxImg.classList.add('zoomed');
-        }
-        updateImageTransform();
+        lightboxImg.style.transform = `translate(${gestureState.translate.x}px, ${gestureState.translate.y}px) scale(${gestureState.scale})`;
     }
 
-    const panStart = (e) => {
-        if (zoomState.scale > zoomState.minScale) {
-            zoomState.isPanning = true;
-            zoomState.start = { x: e.clientX - zoomState.translate.x, y: e.clientY - zoomState.translate.y };
+    function clamp(value, min, max) {
+        return Math.min(Math.max(value, min), max);
+    }
+
+    function clampTranslate() {
+        const imgRect = lightboxImg.getBoundingClientRect();
+        const containerRect = lightbox.getBoundingClientRect();
+        const extraWidth = (imgRect.width - containerRect.width) / 2;
+        const extraHeight = (imgRect.height - containerRect.height) / 2;
+
+        if (extraWidth > 0) {
+            gestureState.translate.x = clamp(gestureState.translate.x, -extraWidth, extraWidth);
+        } else {
+            gestureState.translate.x = 0;
+        }
+        if (extraHeight > 0) {
+            gestureState.translate.y = clamp(gestureState.translate.y, -extraHeight, extraHeight);
+        } else {
+            gestureState.translate.y = 0;
+        }
+    }
+
+    function setScale(newScale, center = { x: window.innerWidth / 2, y: window.innerHeight / 2 }) {
+        const oldScale = gestureState.scale;
+        gestureState.scale = clamp(newScale, gestureState.minScale, gestureState.maxScale);
+
+        if (gestureState.scale === gestureState.minScale) {
+            gestureState.translate = { x: 0, y: 0 };
+            lightboxImg.classList.remove('zoomed');
+        } else {
+            const rect = lightboxImg.getBoundingClientRect();
+            const mouseX = center.x - rect.left;
+            const mouseY = center.y - rect.top;
+
+            gestureState.translate.x = gestureState.translate.x - (mouseX * (gestureState.scale / oldScale - 1));
+            gestureState.translate.y = gestureState.translate.y - (mouseY * (gestureState.scale / oldScale - 1));
+            lightboxImg.classList.add('zoomed');
+        }
+        clampTranslate();
+        updateImageTransform();
+    }
+    
+    // --- Event Handlers for Gestures ---
+    const onPointerDown = (e) => {
+        if (e.pointerType === 'mouse' && e.button !== 0) return;
+        if (gestureState.scale > gestureState.minScale) {
+            gestureState.isPanning = true;
+            gestureState.start = { x: e.clientX - gestureState.translate.x, y: e.clientY - gestureState.translate.y };
             lightboxImg.classList.add('panning');
         }
     };
-    const panMove = (e) => {
-        if (zoomState.isPanning) {
-            zoomState.translate.x = e.clientX - zoomState.start.x;
-            zoomState.translate.y = e.clientY - zoomState.start.y;
+    const onPointerMove = (e) => {
+        if (gestureState.isPanning) {
+            e.preventDefault();
+            gestureState.translate.x = e.clientX - gestureState.start.x;
+            gestureState.translate.y = e.clientY - gestureState.start.y;
+            clampTranslate();
             updateImageTransform();
         }
     };
-    const panEnd = () => {
-        zoomState.isPanning = false;
+    const onPointerUp = () => {
+        gestureState.isPanning = false;
         lightboxImg.classList.remove('panning');
     };
-
-    const handleWheelZoom = (e) => {
+    const onWheel = (e) => {
         e.preventDefault();
-        adjustZoom(e.deltaY * -0.01);
+        const delta = e.deltaY * -0.01;
+        setScale(gestureState.scale + delta, { x: e.clientX, y: e.clientY });
+    };
+
+    // Mobile Pinch-to-Zoom handlers
+    const onTouchStart = (e) => {
+        if (e.touches.length === 2) {
+            const t1 = e.touches[0];
+            const t2 = e.touches[1];
+            gestureState.initialPinchDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+        }
+    };
+    const onTouchMove = (e) => {
+        if (e.touches.length === 2) {
+            e.preventDefault();
+            const t1 = e.touches[0];
+            const t2 = e.touches[1];
+            const currentDist = Math.hypot(t1.clientX - t2.clientX, t1.clientY - t2.clientY);
+            const scale = (currentDist / gestureState.initialPinchDist) * gestureState.scale;
+
+            const center = {
+                x: (t1.clientX + t2.clientX) / 2,
+                y: (t1.clientY + t2.clientY) / 2
+            };
+            setScale(scale, center);
+            gestureState.initialPinchDist = currentDist; // Update for continuous zoom
+        }
     };
 
     function openLightbox(url) {
         lightboxImg.src = url;
         lightbox.classList.add('active');
         document.body.style.overflow = 'hidden';
-        
-        // Reset zoom state
-        zoomState.scale = 1;
-        zoomState.translate = { x: 0, y: 0 };
+
+        // Reset state
+        gestureState.scale = 1;
+        gestureState.translate = { x: 0, y: 0 };
         updateImageTransform();
         lightboxImg.classList.remove('zoomed');
 
-        // Add event listeners
-        lightboxImg.addEventListener('wheel', handleWheelZoom);
-        lightboxImg.addEventListener('mousedown', panStart);
-        lightboxImg.addEventListener('mousemove', panMove);
-        lightboxImg.addEventListener('mouseup', panEnd);
-        lightboxImg.addEventListener('mouseleave', panEnd);
+        // Add event listeners for mouse, wheel, and pointer events
+        lightbox.addEventListener('wheel', onWheel, { passive: false });
+        lightbox.addEventListener('pointerdown', onPointerDown);
+        lightbox.addEventListener('pointermove', onPointerMove);
+        lightbox.addEventListener('pointerup', onPointerUp);
+        lightbox.addEventListener('pointerleave', onPointerUp);
+
+        // Add specific touch listeners for pinch-to-zoom
+        lightbox.addEventListener('touchstart', onTouchStart, { passive: false });
+        lightbox.addEventListener('touchmove', onTouchMove, { passive: false });
     }
 
     function closeLightbox() {
         lightbox.classList.remove('active');
         document.body.style.overflow = 'auto';
-        
-        // Remove event listeners for cleanup
-        lightboxImg.removeEventListener('wheel', handleWheelZoom);
-        lightboxImg.removeEventListener('mousedown', panStart);
-        lightboxImg.removeEventListener('mousemove', panMove);
-        lightboxImg.removeEventListener('mouseup', panEnd);
-        lightboxImg.removeEventListener('mouseleave', panEnd);
+
+        // Cleanup all gesture event listeners
+        lightbox.removeEventListener('wheel', onWheel);
+        lightbox.removeEventListener('pointerdown', onPointerDown);
+        lightbox.removeEventListener('pointermove', onPointerMove);
+        lightbox.removeEventListener('pointerup', onPointerUp);
+        lightbox.removeEventListener('pointerleave', onPointerUp);
+        lightbox.removeEventListener('touchstart', onTouchStart);
+        lightbox.removeEventListener('touchmove', onTouchMove);
     }
-    
+
     async function init() {
         await validateCacheAndRender();
 
         closeBtn.addEventListener('click', closeLightbox);
-        lightbox.addEventListener('click', (e) => { if (e.target === lightbox) closeLightbox(); });
-        document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeLightbox(); });
+        document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && lightbox.classList.contains('active')) closeLightbox(); });
 
         if (prevButton && nextButton) {
             prevButton.addEventListener('click', () => { moveToSlide((currentSlide - 1 + slides.length) % slides.length); resetSlideInterval(); });
             nextButton.addEventListener('click', () => { moveToSlide((currentSlide + 1) % slides.length); resetSlideInterval(); });
         }
-        
-        zoomInBtn.addEventListener('click', () => adjustZoom(0.2));
-        zoomOutBtn.addEventListener('click', () => adjustZoom(-0.2));
-        zoomResetBtn.addEventListener('click', () => {
-            zoomState.scale = 1;
-            zoomState.translate = { x: 0, y: 0 };
-            updateImageTransform();
-            lightboxImg.classList.remove('zoomed');
-        });
+
+        zoomInBtn.addEventListener('click', () => setScale(gestureState.scale + 0.3));
+        zoomOutBtn.addEventListener('click', () => setScale(gestureState.scale - 0.3));
+        zoomResetBtn.addEventListener('click', () => setScale(1));
     }
 
     init();

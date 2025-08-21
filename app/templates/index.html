@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="description" content="{{ content.meta_description }}">
     <title>{{ content.title }}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
@@ -20,9 +20,22 @@
 
     <main>
         <section id="gallery" class="gallery-section">
+            
+            <!-- Hero Carousel -->
+            <div class="hero-carousel" aria-label="Featured Photos">
+                <div class="carousel-track">
+                    <!-- Carousel slides will be dynamically inserted here -->
+                </div>
+                <button class="carousel-button prev" aria-label="Previous Slide">&#10094;</button>
+                <button class="carousel-button next" aria-label="Next Slide">&#10095;</button>
+                <div class="carousel-nav">
+                    <!-- Carousel indicators will be dynamically inserted here -->
+                </div>
+            </div>
+
+            <!-- Masonry Grid -->
             <div id="gallery-container" class="gallery-container">
-                <!-- Photos will be dynamically inserted here by JavaScript -->
-                <p class="loader">Loading Photos...</p>
+                <p class="status-message">Loading Photos...</p>
             </div>
         </section>
 
@@ -35,7 +48,7 @@
 
         <section id="contact" class="content-section">
             <h2>{{ content.contact_heading }}</h2>
-            <p>For inquiries or collaborations, please email me at:</p>
+            <p>For inquiries or collaborations, please email me.</p>
             <a href="mailto:{{ content.contact_email }}" class="contact-email">{{ content.contact_email }}</a>
         </section>
     </main>
@@ -48,8 +61,13 @@
     <div id="lightbox" class="lightbox">
         <span class="lightbox-close">&times;</span>
         <img class="lightbox-content" id="lightbox-img">
+        <div class="lightbox-controls">
+            <button id="zoom-in-btn" title="Zoom In">+</button>
+            <button id="zoom-out-btn" title="Zoom Out">-</button>
+            <button id="zoom-reset-btn" title="Reset Zoom">&#10227;</button>
+        </div>
     </div>
 
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script type="module" src="{{ url_for('static', filename='js/main.js') }}"></script>
 </body>
 </html>

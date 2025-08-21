@@ -104,4 +104,6 @@ venv.bak/
 *.swp
 *.swo
 
+# Custom
 llm_context.txt
+cache/

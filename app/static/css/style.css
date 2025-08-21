@@ -119,6 +119,12 @@ main {
     font-size: 1.1rem;
 }
 
+#contact p {
+    text-align: center;
+    margin-bottom: 1rem;
+    color: var(--text-color-muted);
+}
+
 .contact-email {
     display: block;
     text-align: center;

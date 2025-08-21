@@ -9,10 +9,19 @@ from botocore.client import Config as BotocoreConfig
 from botocore.exceptions import ClientError
 from app.config import Config
 from PIL import Image
+import time
 
 s3_client = None
 THUMBNAIL_CACHE_DIR = os.path.join(os.path.dirname(__file__), '..', 'cache', 'thumbnails')
 THUMBNAIL_MAX_WIDTH = 400
+
+# In-memory cache for the S3 object list to reduce API calls
+s3_object_cache = {
+    'objects': [],
+    'etag': None,
+    'timestamp': 0
+}
+CACHE_EXPIRATION_SECONDS = 60
 
 def _get_datetime_from_key(object_key):
     """
@@ -71,20 +80,33 @@ def create_app():
     def get_photos():
         """
         API endpoint for the complete, cacheable list of all photos, sorted chronologically.
+        Uses a short-lived in-memory cache to avoid hitting OCI on every request.
         """
         try:
-            bucket_name = app.config['OCI_BUCKET_NAME']
+            # Check if the in-memory cache is still valid
+            cache_is_valid = (time.time() - s3_object_cache['timestamp']) < CACHE_EXPIRATION_SECONDS
             
-            paginator = s3_client.get_paginator('list_objects_v2')
-            pages = paginator.paginate(Bucket=bucket_name)
-            
-            all_objects = []
-            for page in pages:
-                if "Contents" in page:
-                    all_objects.extend(page['Contents'])
-            
-            sorted_objects = sorted(all_objects, key=lambda obj: _get_datetime_from_key(obj['Key']), reverse=True)
-            current_etag = _calculate_gallery_etag(sorted_objects)
+            if cache_is_valid and s3_object_cache['objects']:
+                sorted_objects = s3_object_cache['objects']
+                current_etag = s3_object_cache['etag']
+            else:
+                # Cache is invalid or empty, fetch from OCI
+                bucket_name = app.config['OCI_BUCKET_NAME']
+                paginator = s3_client.get_paginator('list_objects_v2')
+                pages = paginator.paginate(Bucket=bucket_name)
+                
+                all_objects = []
+                for page in pages:
+                    if "Contents" in page:
+                        all_objects.extend(page['Contents'])
+                
+                sorted_objects = sorted(all_objects, key=lambda obj: _get_datetime_from_key(obj['Key']), reverse=True)
+                current_etag = _calculate_gallery_etag(sorted_objects)
+
+                # Update the cache
+                s3_object_cache['objects'] = sorted_objects
+                s3_object_cache['etag'] = current_etag
+                s3_object_cache['timestamp'] = time.time()
 
             if current_etag is None:
                 return jsonify([])
@@ -104,7 +126,7 @@ def create_app():
                 key = obj['Key']
                 photo_data.append({
                     'key': key,
-                    'full_url': s3_client.generate_presigned_url('get_object', Params={'Bucket': bucket_name, 'Key': key}, ExpiresIn=3600),
+                    'full_url': s3_client.generate_presigned_url('get_object', Params={'Bucket': app.config['OCI_BUCKET_NAME'], 'Key': key}, ExpiresIn=3600),
                     'thumbnail_url': url_for('get_thumbnail', object_key=key, _external=False)
                 })
             

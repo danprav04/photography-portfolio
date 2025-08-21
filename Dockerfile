@@ -7,6 +7,9 @@ WORKDIR /app
 # Stage 3: Set environment variables
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
+# Set the number of Gunicorn workers.
+# A common starting point is (2 * CPU_CORES) + 1.
+ENV GUNICORN_WORKERS 3
 
 # Stage 4: Install system dependencies for Pillow and application dependencies
 # Copy the requirements file first to leverage Docker cache
@@ -29,5 +32,7 @@ RUN mkdir -p /app/cache/thumbnails
 EXPOSE 8000
 
 # Stage 8: The command to run the application
-# Gunicorn is a production-grade WSGI server
-CMD ["gunicorn", "--bind", "0.0.0.0:8000", "app:create_app()"]
+# Use gevent workers for better I/O concurrency.
+# Increase the timeout to handle potentially slow S3 operations.
+# The number of workers is controlled by the GUNICORN_WORKERS env var.
+CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "${GUNICORN_WORKERS}", "--worker-class", "gevent", "--timeout", "90", "app:create_app()"]

@@ -30,11 +30,9 @@ const lazyLoadObserver = new IntersectionObserver((entries, observer) => {
 
             if (!thumbnailSrc) return;
 
-            // --- Stage 1: Load and display the thumbnail ---
-            img.src = thumbnailSrc;
-
-            img.onload = () => {
-                // The thumbnail is now loaded, so make it visible immediately.
+            // Define the complete loading logic in a function to avoid repetition.
+            const handleImageLoad = () => {
+                // The thumbnail is now loaded, so make it visible.
                 img.style.opacity = 1;
 
                 // --- Stage 2: Load the full-resolution image in the background ---
@@ -52,11 +50,23 @@ const lazyLoadObserver = new IntersectionObserver((entries, observer) => {
                     // If for some reason there's no full-res image, just remove the spinner.
                     container.classList.remove('loading');
                 }
-
-                // Important: Remove the onload handler. This prevents it from
-                // re-firing when we set the src to the full-resolution image later.
-                img.onload = null;
             };
+
+            // --- FIX: Attach the event handler BEFORE setting the src attribute. ---
+            // This prevents a race condition where the image loads from cache
+            // before the onload handler is attached.
+            img.onload = handleImageLoad;
+
+            // --- Set the src to initiate the download. ---
+            img.src = thumbnailSrc;
+
+            // --- FIX: Add a fallback for cached images. ---
+            // If the image is already in the browser's cache, the `load` event
+            // may have already fired. The `img.complete` property will be true in this
+            // case, so we manually call the handler to ensure the UI updates.
+            if (img.complete) {
+                handleImageLoad();
+            }
 
             // We've initiated the loading process, so we can stop observing this element.
             observer.unobserve(container);

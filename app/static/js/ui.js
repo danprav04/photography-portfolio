@@ -13,6 +13,51 @@ let dots = [];
 let currentSlide = 0;
 let slideInterval;
 
+// --- Intersection Observer for Lazy Loading ---
+const observerOptions = {
+    root: null, // observes intersections relative to the viewport
+    rootMargin: '0px 0px 300px 0px', // trigger when 300px away from the bottom of the viewport
+    threshold: 0.01 // trigger as soon as a tiny part is visible
+};
+
+const lazyLoadObserver = new IntersectionObserver((entries, observer) => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) {
+            const container = entry.target;
+            const img = container.querySelector('img');
+
+            // Start loading the thumbnail from the data-src attribute
+            img.src = img.dataset.src;
+
+            // Once the thumbnail is loaded, we can proceed to load the full image
+            img.onload = () => {
+                const fullSrc = img.dataset.fullSrc;
+                if (fullSrc) {
+                    const fullImage = new Image();
+                    fullImage.src = fullSrc;
+
+                    // When the full-res image is loaded, replace the src and fade it in.
+                    fullImage.onload = () => {
+                        img.src = fullSrc;
+                        img.removeAttribute('data-full-src');
+                        img.removeAttribute('data-src');
+                        container.classList.remove('loading');
+                        img.style.opacity = 1; // Trigger the CSS fade-in transition
+                    };
+                } else {
+                    // If there's no full-res image, just show the thumbnail
+                    container.classList.remove('loading');
+                    img.style.opacity = 1;
+                }
+            };
+
+            // We've started loading, so we can stop observing this element.
+            observer.unobserve(container);
+        }
+    });
+}, observerOptions);
+
+
 /**
  * Shuffles an array in place and returns a new array containing the first `count` items.
  * Uses the Fisher-Yates (aka Knuth) shuffle algorithm for an unbiased shuffle.
@@ -39,30 +84,8 @@ function shuffleAndPick(array, count) {
     return shuffled.slice(0, count);
 }
 
-
 /**
- * Kicks off the process of loading full-resolution images for all thumbnails.
- */
-function loadFullResolutionImages() {
-    const imagesToLoad = document.querySelectorAll('img[data-full-src]');
-    imagesToLoad.forEach(imgElement => {
-        const fullSrc = imgElement.dataset.fullSrc;
-        const fullImage = new Image();
-        fullImage.src = fullSrc;
-
-        fullImage.onload = () => {
-            imgElement.src = fullSrc;
-            const wrapper = imgElement.closest('.gallery-item, .carousel-slide');
-            if (wrapper) {
-                wrapper.classList.remove('loading');
-            }
-            imgElement.removeAttribute('data-full-src');
-        };
-    });
-}
-
-/**
- * Renders the hero carousel with thumbnails and loading indicators.
+ * Renders the hero carousel with placeholders for lazy loading.
  * @param {Array} featuredPhotos - An array of photo objects for the carousel.
  */
 function renderCarousel(featuredPhotos) {
@@ -80,15 +103,21 @@ function renderCarousel(featuredPhotos) {
         slide.style.backgroundImage = `url(${photo.thumbnail_url})`;
 
         const img = document.createElement('img');
-        img.src = photo.thumbnail_url;
-        img.alt = 'Featured Image';
+        // Use a placeholder src and store the real sources in data attributes
+        img.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+        img.dataset.src = photo.thumbnail_url;
         img.dataset.fullSrc = photo.full_url;
+        img.alt = 'Featured Image';
+        img.style.opacity = 0; // Set initial opacity to 0 for fade-in
 
         const spinner = document.createElement('div');
         spinner.className = 'loader-spinner';
 
         slide.append(img, spinner);
         carouselTrack.appendChild(slide);
+
+        // Add the slide to the observer to be lazy-loaded
+        lazyLoadObserver.observe(slide);
 
         img.addEventListener('click', () => {
             if (!slide.classList.contains('loading')) {
@@ -117,7 +146,7 @@ function renderCarousel(featuredPhotos) {
 }
 
 /**
- * Renders the masonry gallery grid with thumbnails and loading indicators.
+ * Renders the masonry gallery grid with placeholders for lazy loading.
  * @param {Array} galleryPhotos - An array of all photo objects for the gallery.
  */
 function renderGallery(galleryPhotos) {
@@ -131,15 +160,21 @@ function renderGallery(galleryPhotos) {
         galleryItem.className = 'gallery-item loading';
 
         const img = document.createElement('img');
-        img.src = photo.thumbnail_url;
-        img.alt = 'Portfolio Image';
+        // Use a placeholder src and store the real sources in data attributes
+        img.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+        img.dataset.src = photo.thumbnail_url;
         img.dataset.fullSrc = photo.full_url;
+        img.alt = 'Portfolio Image';
+        img.style.opacity = 0; // Set initial opacity to 0 for fade-in
 
         const spinner = document.createElement('div');
         spinner.className = 'loader-spinner';
 
         galleryItem.append(img, spinner);
         galleryContainer.appendChild(galleryItem);
+        
+        // Add the item to the observer to be lazy-loaded
+        lazyLoadObserver.observe(galleryItem);
 
         img.addEventListener('click', () => {
             if (!galleryItem.classList.contains('loading')) {
@@ -184,7 +219,6 @@ export function initUI(allPhotos) {
     // --- Rendering ---
     renderCarousel(featuredPhotos);
     renderGallery(galleryPhotos);
-    loadFullResolutionImages();
 
     if (prevButton && nextButton) {
         prevButton.addEventListener('click', () => {

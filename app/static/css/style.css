@@ -266,14 +266,19 @@ main {
     background-color: var(--surface-color);
 }
 
+.gallery-item.loading {
+    /* Prevents layout shift by giving the placeholder a height */
+    /* This ensures IntersectionObserver can track it correctly when off-screen */
+    min-height: 200px;
+}
+
 .gallery-item img {
     width: 100%;
     height: auto;
     display: block;
     border-radius: 8px;
-    transition: transform 0.4s ease, filter 0.4s ease, opacity 0.5s ease-in-out;
+    transition: opacity 0.5s ease-in-out, transform 0.4s ease, filter 0.4s ease;
     border: 1px solid var(--border-color);
-    opacity: 1; 
 }
 
 /* --- Loading Indicator --- */

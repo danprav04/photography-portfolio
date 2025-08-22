@@ -25,33 +25,40 @@ const lazyLoadObserver = new IntersectionObserver((entries, observer) => {
         if (entry.isIntersecting) {
             const container = entry.target;
             const img = container.querySelector('img');
+            const thumbnailSrc = img.dataset.src;
+            const fullSrc = img.dataset.fullSrc;
 
-            // Start loading the thumbnail from the data-src attribute
-            img.src = img.dataset.src;
+            if (!thumbnailSrc) return;
 
-            // Once the thumbnail is loaded, we can proceed to load the full image
+            // --- Stage 1: Load and display the thumbnail ---
+            img.src = thumbnailSrc;
+
             img.onload = () => {
-                const fullSrc = img.dataset.fullSrc;
+                // The thumbnail is now loaded, so make it visible immediately.
+                img.style.opacity = 1;
+
+                // --- Stage 2: Load the full-resolution image in the background ---
                 if (fullSrc) {
                     const fullImage = new Image();
                     fullImage.src = fullSrc;
 
-                    // When the full-res image is loaded, replace the src and fade it in.
                     fullImage.onload = () => {
+                        // Once the full image is fully loaded, swap the src
+                        // and remove the loading spinner for the final state.
                         img.src = fullSrc;
-                        img.removeAttribute('data-full-src');
-                        img.removeAttribute('data-src');
                         container.classList.remove('loading');
-                        img.style.opacity = 1; // Trigger the CSS fade-in transition
                     };
                 } else {
-                    // If there's no full-res image, just show the thumbnail
+                    // If for some reason there's no full-res image, just remove the spinner.
                     container.classList.remove('loading');
-                    img.style.opacity = 1;
                 }
+
+                // Important: Remove the onload handler. This prevents it from
+                // re-firing when we set the src to the full-resolution image later.
+                img.onload = null;
             };
 
-            // We've started loading, so we can stop observing this element.
+            // We've initiated the loading process, so we can stop observing this element.
             observer.unobserve(container);
         }
     });

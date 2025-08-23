@@ -30,45 +30,53 @@ const lazyLoadObserver = new IntersectionObserver((entries, observer) => {
 
             if (!thumbnailSrc) return;
 
-            // Define the complete loading logic in a function to avoid repetition.
-            const handleImageLoad = () => {
+            // --- Stage 1: Load the low-resolution thumbnail ---
+            const handleThumbnailLoad = () => {
                 // The thumbnail is now loaded, so make it visible.
                 img.style.opacity = 1;
 
                 // --- Stage 2: Load the full-resolution image in the background ---
                 if (fullSrc) {
                     const fullImage = new Image();
-                    fullImage.src = fullSrc;
 
-                    fullImage.onload = () => {
-                        // Once the full image is fully loaded, swap the src
-                        // and remove the loading spinner for the final state.
+                    // This function completes the process by swapping the src
+                    // to the high-resolution version and removing the loading class.
+                    const swapToFullRes = () => {
                         img.src = fullSrc;
                         container.classList.remove('loading');
                     };
+                    
+                    // Attach the onload handler BEFORE setting the src attribute.
+                    // This prevents the race condition with cached images.
+                    fullImage.onload = swapToFullRes;
+
+                    // Set the src to begin the download.
+                    fullImage.src = fullSrc;
+
+                    // If the image is already in the browser cache, the 'load' event
+                    // may have already fired. The 'complete' property will be true
+                    // in this case, so we manually call the handler.
+                    if (fullImage.complete) {
+                        swapToFullRes();
+                    }
                 } else {
-                    // If for some reason there's no full-res image, just remove the spinner.
+                    // If there is no full-res image, just remove the loading state.
                     container.classList.remove('loading');
                 }
             };
 
-            // --- FIX: Attach the event handler BEFORE setting the src attribute. ---
-            // This prevents a race condition where the image loads from cache
-            // before the onload handler is attached.
-            img.onload = handleImageLoad;
+            // Attach the onload handler for the thumbnail BEFORE setting its src.
+            img.onload = handleThumbnailLoad;
 
-            // --- Set the src to initiate the download. ---
+            // Set the src to initiate the thumbnail download.
             img.src = thumbnailSrc;
-
-            // --- FIX: Add a fallback for cached images. ---
-            // If the image is already in the browser's cache, the `load` event
-            // may have already fired. The `img.complete` property will be true in this
-            // case, so we manually call the handler to ensure the UI updates.
+            
+            // Handle the case where the thumbnail itself is already cached.
             if (img.complete) {
-                handleImageLoad();
+                handleThumbnailLoad();
             }
 
-            // We've initiated the loading process, so we can stop observing this element.
+            // The loading process has been initiated, so we can stop observing.
             observer.unobserve(container);
         }
     });

@@ -30,8 +30,13 @@ const lazyLoadObserver = new IntersectionObserver((entries, observer) => {
 
             if (!thumbnailSrc) return;
 
-            // --- Stage 1: Load the low-resolution thumbnail ---
+            // This handler is responsible for loading the thumbnail and then
+            // kicking off the full-resolution image load.
             const handleThumbnailLoad = () => {
+                // IMPORTANT: Immediately remove the onload handler to prevent it
+                // from firing again when we swap the src to the full-res image.
+                img.onload = null;
+
                 // The thumbnail is now loaded, so make it visible.
                 img.style.opacity = 1;
 
@@ -45,10 +50,17 @@ const lazyLoadObserver = new IntersectionObserver((entries, observer) => {
                         img.src = fullSrc;
                         container.classList.remove('loading');
                     };
-                    
+
                     // Attach the onload handler BEFORE setting the src attribute.
-                    // This prevents the race condition with cached images.
+                    // This prevents a race condition with cached images.
                     fullImage.onload = swapToFullRes;
+                    
+                    // Add an error handler for robustness. If the full image fails,
+                    // remove the spinner so the user can at least see the thumbnail.
+                    fullImage.onerror = () => {
+                        console.error(`Failed to load full-resolution image: ${fullSrc}`);
+                        container.classList.remove('loading');
+                    };
 
                     // Set the src to begin the download.
                     fullImage.src = fullSrc;

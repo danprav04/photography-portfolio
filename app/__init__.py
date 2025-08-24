@@ -37,14 +37,24 @@ def _get_datetime_from_key(object_key):
 
 def _calculate_gallery_etag(objects):
     """
-    Calculates a collective ETag for a list of S3 objects.
+    Calculates a collective ETag for a list of S3 objects, incorporating a
+    time component to ensure presigned URLs are periodically refreshed.
     """
     if not objects:
         return None
     # ETag from S3 already includes quotes, so we use them as is.
     etags = [obj.get('ETag', '') for obj in objects]
     concatenated_etags = "".join(etags)
-    return f'"{hashlib.sha256(concatenated_etags.encode("utf-8")).hexdigest()}"'
+
+    # Add a time-based salt to the ETag that changes every 30 minutes (1800s).
+    # This forces clients to refetch the API response and get new presigned URLs
+    # before the old ones expire (which have a 60-minute lifetime).
+    time_salt = str(int(time.time() // 1800))
+    
+    # Combine content hash with time salt for the final ETag.
+    combined_hash_input = f"{concatenated_etags}-{time_salt}"
+    
+    return f'"{hashlib.sha256(combined_hash_input.encode("utf-8")).hexdigest()}"'
 
 def create_app():
     """Application factory function."""
@@ -98,7 +108,7 @@ def create_app():
                 with open(API_CACHE_FILE, 'r') as f:
                     cached_data = json.load(f)
                 sorted_objects = cached_data['objects']
-                current_etag = cached_data['etag']
+                current_etag = _calculate_gallery_etag(sorted_objects) # ETag is recalculated with time salt
             else:
                 # Cache is invalid or missing, fetch fresh from OCI
                 bucket_name = app.config['OCI_BUCKET_NAME']
@@ -118,7 +128,8 @@ def create_app():
                 current_etag = _calculate_gallery_etag(sorted_objects)
 
                 # Write the fresh data to the cache file atomically
-                cache_payload = {'etag': current_etag, 'objects': sorted_objects}
+                # Note: We don't store the time-salted ETag in the file, only the object list
+                cache_payload = {'objects': sorted_objects}
                 temp_file_path = API_CACHE_FILE + f".tmp-{os.getpid()}"
                 with open(temp_file_path, 'w') as f:
                     json.dump(cache_payload, f)

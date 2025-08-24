@@ -60,6 +60,7 @@ const lazyLoadObserver = new IntersectionObserver((entries, observer) => {
                     fullImage.onerror = () => {
                         console.error(`Failed to load full-resolution image: ${fullSrc}`);
                         container.classList.remove('loading');
+                        container.classList.add('load-error');
                     };
 
                     // Set the src to begin the download.

@@ -314,7 +314,7 @@ main {
     cursor: pointer;
 }
 
-.gallery-item:not(.loading) img:hover {
+.gallery-item:not(.loading):not(.load-error) img:hover {
     transform: scale(1.03);
     filter: brightness(1.1);
 }
@@ -325,6 +325,26 @@ main {
     padding: 4rem 0;
     font-size: 1.2rem;
     color: var(--text-color-muted);
+}
+
+/* Styles for when a full-resolution image fails to load */
+.gallery-item.load-error::after {
+    content: '⚠';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 4;
+    font-size: 2.5rem;
+    color: white;
+    text-shadow: 0 0 10px rgba(0, 0, 0, 0.8);
+    pointer-events: none;
+    opacity: 0.9;
+}
+
+.gallery-item.load-error img {
+    filter: grayscale(70%) brightness(0.7);
+    cursor: not-allowed;
 }
 
 /* --- Lightbox --- */

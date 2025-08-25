@@ -133,6 +133,10 @@ def create_app():
                 temp_file_path = API_CACHE_FILE + f".tmp-{os.getpid()}"
                 with open(temp_file_path, 'w') as f:
                     json.dump(cache_payload, f)
+                    
+                if os.path.exists(API_CACHE_FILE):
+                    os.remove(API_CACHE_FILE)
+                    
                 os.rename(temp_file_path, API_CACHE_FILE)
 
             if not current_etag:

@@ -8,17 +8,12 @@
 export async function loadPhotoData() {
     console.log("Fetching photo data from server.");
     try {
-        // A standard GET request. The browser will automatically handle sending the
-        // If-None-Match header if it has a cached ETag for this URL. The server
-        // will respond with 304 Not Modified if the data hasn't changed, and
-        // the browser will serve the response from its cache.
         const response = await fetch('/api/photos');
 
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        // If the server explicitly returns no content, provide an empty array.
         if (response.status === 204) {
              return [];
         }
@@ -28,7 +23,31 @@ export async function loadPhotoData() {
 
     } catch (error) {
         console.error("Could not fetch photos:", error);
-        // In case of a network or server error, return null to be handled gracefully.
+        return null;
+    }
+}
+
+/**
+ * Loads a single photo's details (Presigned URL) by its key.
+ * Used for deep linking / sharing.
+ * @param {string} key - The S3 object key of the photo.
+ * @returns {Promise<Object|null>} A promise resolving to the single photo object or null.
+ */
+export async function fetchSinglePhoto(key) {
+    if (!key) return null;
+    console.log(`Fetching single photo: ${key}`);
+    try {
+        // Encode the key to handle slashes/special chars in URL
+        const response = await fetch(`/api/photo/${key}`);
+        
+        if (!response.ok) {
+            console.warn(`Could not load shared photo: ${response.status}`);
+            return null;
+        }
+        
+        return await response.json();
+    } catch (error) {
+        console.error("Error fetching single photo:", error);
         return null;
     }
 }

@@ -150,6 +150,39 @@ def create_app():
         }
         return render_template('index.html', content=content)
 
+    @app.route('/api/photo/<path:object_key>')
+    def get_single_photo(object_key):
+        """
+        API endpoint to retrieve a presigned URL for a single specific photo.
+        Used for direct linking/sharing so the user doesn't have to wait for the whole list.
+        """
+        try:
+            # We explicitly check if the object exists to return 404 cleanly
+            # instead of generating a broken link.
+            s3_client.head_object(Bucket=app.config['OCI_BUCKET_NAME'], Key=object_key)
+            
+            full_url = s3_client.generate_presigned_url(
+                'get_object',
+                Params={'Bucket': app.config['OCI_BUCKET_NAME'], 'Key': object_key},
+                ExpiresIn=3600
+            )
+            
+            return jsonify({
+                'key': object_key,
+                'full_url': full_url,
+                'thumbnail_url': url_for('get_thumbnail', object_key=object_key, _external=False)
+            })
+            
+        except ClientError as e:
+            error_code = e.response.get("Error", {}).get("Code")
+            if error_code == '404':
+                return jsonify({'error': 'Photo not found'}), 404
+            print(f"S3 Client Error for single photo: {e}")
+            return jsonify({"error": "Could not retrieve photo."}), 500
+        except Exception as e:
+            print(f"Unexpected Error for single photo: {e}")
+            return jsonify({"error": "Internal server error."}), 500
+
     @app.route('/api/photos', methods=['GET', 'HEAD'])
     def get_photos():
         """

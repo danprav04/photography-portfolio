@@ -20,6 +20,26 @@ const gestureState = {
 // A flag to ensure we only schedule one frame update at a time.
 let isUpdateQueued = false;
 
+// --- URL State Management ---
+/**
+ * Updates the browser URL to reflect the currently viewed photo.
+ * @param {string} key - The ID/Key of the photo.
+ */
+function updateUrlState(key) {
+    if (key) {
+        const newUrl = `${window.location.pathname}?id=${key}`;
+        window.history.pushState({ photoKey: key }, '', newUrl);
+    }
+}
+
+/**
+ * Reverts the browser URL to the base state (clearing the query param).
+ */
+function clearUrlState() {
+    const baseUrl = window.location.pathname;
+    window.history.pushState({}, '', baseUrl);
+}
+
 // --- Animation Loop ---
 /**
  * Applies the current gesture state (translation and scale) to the image.
@@ -151,13 +171,26 @@ function closeLightbox() {
     lightbox.removeEventListener('pointerleave', onPointerUp);
     lightbox.removeEventListener('touchstart', onTouchStart);
     lightbox.removeEventListener('touchmove', onTouchMove);
+
+    // Reset URL
+    clearUrlState();
 }
 
-export function openLightbox(url) {
+/**
+ * Opens the lightbox.
+ * @param {string} url - The URL of the full-resolution image.
+ * @param {string|null} key - The S3 key/ID of the image for sharing (optional).
+ */
+export function openLightbox(url, key = null) {
     lightboxImg.src = url;
     lightboxImg.draggable = false;
     lightbox.classList.add('active');
     document.body.style.overflow = 'hidden';
+
+    // Update URL for deep linking if key is provided
+    if (key) {
+        updateUrlState(key);
+    }
 
     // Reset state for the new image.
     gestureState.scale = 1;
@@ -189,6 +222,17 @@ export function initLightbox() {
     lightbox.addEventListener('click', (e) => {
         if (e.target === lightbox) {
             closeLightbox();
+        }
+    });
+    
+    // Listen for browser back button to close lightbox
+    window.addEventListener('popstate', (e) => {
+        if (lightbox.classList.contains('active')) {
+             // We manually close, but since the popstate already changed the URL,
+             // we don't want closeLightbox to pushState again.
+             // For simplicity, we just close the UI here.
+             lightbox.classList.remove('active');
+             document.body.style.overflow = 'auto';
         }
     });
 

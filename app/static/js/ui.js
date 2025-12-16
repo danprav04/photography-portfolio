@@ -73,7 +73,7 @@ const lazyLoadObserver = new IntersectionObserver((entries, observer) => {
 
 /**
  * Renders the hero carousel.
- * LOGIC UPDATE: Selects the top 5 newest photos deterministically.
+ * LOGIC UPDATE: Selects the top 20 newest photos.
  */
 function renderCarousel(featuredPhotos) {
     if (!carouselTrack || !featuredPhotos || featuredPhotos.length === 0) {
@@ -109,9 +109,10 @@ function renderCarousel(featuredPhotos) {
         lazyLoadObserver.observe(slide);
 
         // Click to open lightbox (only if not dragging)
+        // Passes the key to enable URL sharing
         img.addEventListener('click', (e) => {
             if (!slide.classList.contains('loading') && !isDragging) {
-                openLightbox(photo.full_url);
+                openLightbox(photo.full_url, photo.key);
             }
         });
 
@@ -198,9 +199,10 @@ function renderGallery(galleryPhotos) {
         
         lazyLoadObserver.observe(galleryItem);
 
+        // Pass the key to openLightbox for sharing support
         img.addEventListener('click', () => {
             if (!galleryItem.classList.contains('loading')) {
-                openLightbox(photo.full_url);
+                openLightbox(photo.full_url, photo.key);
             }
         });
     });
@@ -318,9 +320,9 @@ function touchEnd() {
  * Initializes all UI components.
  */
 export function initUI(allPhotos) {
-    // LOGIC CHANGE: No more shuffle. Pick top 5 newest.
+    // LOGIC CHANGE: No more shuffle. Pick top 20 newest.
     // Ensure allPhotos are sorted (API should have done this, but we slice the top).
-    const featuredPhotos = allPhotos.slice(0, 5);
+    const featuredPhotos = allPhotos.slice(0, 20);
 
     // Render components
     renderCarousel(featuredPhotos);

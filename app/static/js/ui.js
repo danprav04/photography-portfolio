@@ -18,6 +18,10 @@ let startPos = 0;
 let currentTranslate = 0;
 let prevTranslate = 0;
 
+// --- Gallery State ---
+let currentGalleryPhotos = [];
+let currentColumnCount = 0;
+
 // --- Intersection Observer for Lazy Loading & Animations ---
 const lazyLoadObserver = new IntersectionObserver((entries, observer) => {
     entries.forEach(entry => {
@@ -133,17 +137,48 @@ function renderCarousel(featuredPhotos) {
 }
 
 /**
+ * Helper function to determine the number of columns based on viewport width.
+ * Matches breakpoints: > 1200px (3 cols), 768px-1200px (2 cols), < 768px (1 col).
+ */
+function getColumnCount() {
+    const width = window.innerWidth;
+    if (width <= 768) return 1;
+    if (width <= 1200) return 2;
+    return 3;
+}
+
+/**
  * Renders the masonry gallery.
- * LOGIC UPDATE: Renders photos in the order received (Newest First).
+ * LOGIC UPDATE: Uses JS-based column distribution to ensure row-based reading order.
+ * Items are distributed round-robin: 0->Col1, 1->Col2, 2->Col3, 3->Col1...
  */
 function renderGallery(galleryPhotos) {
+    // Store data for potential re-renders on resize
+    currentGalleryPhotos = galleryPhotos;
+    const numCols = getColumnCount();
+    currentColumnCount = numCols;
+
     galleryContainer.innerHTML = '';
+    
     if (!galleryPhotos || galleryPhotos.length === 0) {
         galleryContainer.innerHTML = '<p class="status-message">No photos found.</p>';
         return;
     }
     
+    // Create column wrappers
+    const columns = [];
+    for (let i = 0; i < numCols; i++) {
+        const col = document.createElement('div');
+        col.className = 'gallery-column';
+        columns.push(col);
+        galleryContainer.appendChild(col);
+    }
+
+    // Distribute photos into columns
     galleryPhotos.forEach((photo, index) => {
+        const colIndex = index % numCols;
+        const targetColumn = columns[colIndex];
+
         const galleryItem = document.createElement('div');
         galleryItem.className = 'gallery-item loading';
         // Add a slight stagger to the animation delay based on index
@@ -159,7 +194,7 @@ function renderGallery(galleryPhotos) {
         spinner.className = 'loader-spinner';
 
         galleryItem.append(img, spinner);
-        galleryContainer.appendChild(galleryItem);
+        targetColumn.appendChild(galleryItem);
         
         lazyLoadObserver.observe(galleryItem);
 
@@ -170,6 +205,18 @@ function renderGallery(galleryPhotos) {
         });
     });
 }
+
+// --- Resize Listener for Responsive Re-flow ---
+let resizeTimeout;
+window.addEventListener('resize', () => {
+    clearTimeout(resizeTimeout);
+    resizeTimeout = setTimeout(() => {
+        const newColCount = getColumnCount();
+        if (newColCount !== currentColumnCount && currentGalleryPhotos.length > 0) {
+            renderGallery(currentGalleryPhotos);
+        }
+    }, 200);
+});
 
 // --- Carousel Logic & Swipe Support ---
 

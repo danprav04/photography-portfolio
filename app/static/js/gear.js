@@ -39,7 +39,7 @@ const gearList = [
       id: "clean-kit",
       name: "VSGO APS-C Digital Camera Sensor Cleaning Kit",
       description: "Essential maintenance tools to keep sensors and glass dust-free.",
-      asin: "B08P3BKJQQ", 
+      asin: "B089VTSRBW", 
       type: "amazon"
     },
     {

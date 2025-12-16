@@ -1,6 +1,7 @@
 import { loadPhotoData } from './api.js';
 import { initUI } from './ui.js';
 import { initLightbox } from './lightbox.js';
+import { initGear } from './gear.js';
 
 /**
  * Initializes the application.
@@ -11,10 +12,17 @@ async function init() {
     // 1. Initialize the lightbox controls and base event listeners.
     initLightbox();
 
-    // 2. Load all photo data, using cache validation.
+    // 2. Initialize Gear Section (if present)
+    const gearContainer = document.getElementById('gear-container');
+    if (gearContainer) {
+        const amazonTag = gearContainer.dataset.amazonTag;
+        initGear('gear-container', amazonTag);
+    }
+
+    // 3. Load all photo data, using cache validation.
     const allPhotos = await loadPhotoData();
 
-    // 3. Render the UI (carousel and gallery) with the loaded data.
+    // 4. Render the UI (carousel and gallery) with the loaded data.
     if (allPhotos) {
         initUI(allPhotos);
     } else {

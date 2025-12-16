@@ -23,6 +23,7 @@
             <nav class="nav">
                 <a href="#gallery">Portfolio</a>
                 <a href="#about">About</a>
+                <a href="#gear">Gear</a>
                 <a href="#contact">Contact</a>
             </nav>
         </div>
@@ -68,6 +69,18 @@
             </div>
         </section>
 
+        <div class="content-divider"></div>
+
+        <section id="gear" class="content-section">
+            <h2>My Gear</h2>
+            <!-- The dataset.amazonTag is populated from Flask config -->
+            <div id="gear-container" class="gear-container" data-amazon-tag="{{ content.amazon_tag }}">
+                <!-- Gear items will be dynamically inserted here -->
+            </div>
+        </section>
+
+        <div class="content-divider"></div>
+
         <section id="contact" class="content-section contact-section">
             <h2>{{ content.contact_heading }}</h2>
             <p>Available for commissions and collaborations.</p>
@@ -77,6 +90,9 @@
 
     <footer class="footer">
         <p>{{ content.footer_text }}</p>
+        {% if content.disclaimer_text %}
+        <p class="disclaimer-text">{{ content.disclaimer_text }}</p>
+        {% endif %}
     </footer>
 
     <!-- Lightbox container, hidden by default -->

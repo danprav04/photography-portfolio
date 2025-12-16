@@ -144,7 +144,9 @@ def create_app():
             'about_content': app.config['PORTFOLIO_ABOUT_CONTENT'],
             'contact_heading': app.config['PORTFOLIO_CONTACT_HEADING'],
             'contact_email': app.config['PORTFOLIO_CONTACT_EMAIL'],
-            'footer_text': app.config['PORTFOLIO_FOOTER_TEXT']
+            'footer_text': app.config['PORTFOLIO_FOOTER_TEXT'],
+            'amazon_tag': app.config['AMAZON_TAG'],
+            'disclaimer_text': app.config['PORTFOLIO_DISCLAIMER_TEXT']
         }
         return render_template('index.html', content=content)
 

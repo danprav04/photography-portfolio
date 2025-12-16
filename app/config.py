@@ -34,3 +34,7 @@ class Config:
     PORTFOLIO_CONTACT_HEADING = content_config.get('PORTFOLIO_CONTACT_HEADING', 'Contact')
     PORTFOLIO_CONTACT_EMAIL = content_config.get('PORTFOLIO_CONTACT_EMAIL', 'email@example.com')
     PORTFOLIO_FOOTER_TEXT = content_config.get('PORTFOLIO_FOOTER_TEXT', '© 2025 Me. All rights reserved.')
+    
+    # --- AFFILIATE CONFIGURATION ---
+    AMAZON_TAG = content_config.get('AMAZON_TAG', '')
+    PORTFOLIO_DISCLAIMER_TEXT = content_config.get('PORTFOLIO_DISCLAIMER_TEXT', 'As an Amazon Associate I earn from qualifying purchases.')

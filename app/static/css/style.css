@@ -144,16 +144,16 @@ main {
 /* --- Gear Section --- */
 .gear-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 1rem;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); /* Slightly wider min-width to accommodate descriptions */
+    gap: 1.5rem;
     text-align: left;
 }
 
 .gear-item {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    padding: 1rem 1.25rem;
+    align-items: center; /* Keeps icon vertically centered */
+    padding: 1.25rem 1.5rem;
     background-color: var(--surface-color);
     border: 1px solid var(--border-color);
     border-radius: 4px;
@@ -164,21 +164,47 @@ main {
 
 .gear-item:hover {
     border-color: var(--accent-color);
-    color: var(--text-primary);
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(0,0,0,0.2);
 }
 
+/* Container for Title and Description */
+.gear-info {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    margin-right: 1.5rem;
+}
+
 .gear-title {
     font-size: 1rem;
-    font-weight: 400;
-    flex-grow: 1;
-    margin-right: 1rem;
+    font-weight: 500;
+    color: var(--text-primary);
+    transition: color 0.2s ease;
+}
+
+.gear-item:hover .gear-title {
+    color: var(--accent-color);
+}
+
+.gear-description {
+    font-size: 0.85rem;
+    color: #6c7075;
+    margin-top: 0.25rem;
+    line-height: 1.4;
+    font-weight: 300;
 }
 
 .gear-icon {
     color: var(--accent-color);
     font-size: 1.2rem;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+    flex-shrink: 0;
+}
+
+.gear-item:hover .gear-icon {
+    opacity: 1;
 }
 
 /* --- Contact Section --- */

@@ -12,119 +12,64 @@ let slides = [];
 let dots = [];
 let currentSlide = 0;
 let slideInterval;
+let autoPlayDelay = 5000;
+let isDragging = false;
+let startPos = 0;
+let currentTranslate = 0;
+let prevTranslate = 0;
 
-// --- Intersection Observer for Lazy Loading ---
-const observerOptions = {
-    root: null, // observes intersections relative to the viewport
-    rootMargin: '0px 0px 300px 0px', // trigger when 300px away from the bottom of the viewport
-    threshold: 0.01 // trigger as soon as a tiny part is visible
-};
-
+// --- Intersection Observer for Lazy Loading & Animations ---
 const lazyLoadObserver = new IntersectionObserver((entries, observer) => {
     entries.forEach(entry => {
         if (entry.isIntersecting) {
             const container = entry.target;
             const img = container.querySelector('img');
+            
+            if (!img) return;
+            
             const thumbnailSrc = img.dataset.src;
             const fullSrc = img.dataset.fullSrc;
 
             if (!thumbnailSrc) return;
 
-            // This handler is responsible for loading the thumbnail and then
-            // kicking off the full-resolution image load.
+            // Load logic
             const handleThumbnailLoad = () => {
-                // IMPORTANT: Immediately remove the onload handler to prevent it
-                // from firing again when we swap the src to the full-res image.
                 img.onload = null;
+                img.classList.add('loaded'); // Trigger fade-in
 
-                // The thumbnail is now loaded, so make it visible.
-                img.style.opacity = 1;
-
-                // --- Stage 2: Load the full-resolution image in the background ---
+                // Load Full Res
                 if (fullSrc) {
                     const fullImage = new Image();
-
-                    // This function completes the process by swapping the src
-                    // to the high-resolution version and removing the loading class.
-                    const swapToFullRes = () => {
+                    fullImage.onload = () => {
                         img.src = fullSrc;
                         container.classList.remove('loading');
                     };
-
-                    // Attach the onload handler BEFORE setting the src attribute.
-                    // This prevents a race condition with cached images.
-                    fullImage.onload = swapToFullRes;
-                    
-                    // Add an error handler for robustness. If the full image fails,
-                    // remove the spinner so the user can at least see the thumbnail.
                     fullImage.onerror = () => {
-                        console.error(`Failed to load full-resolution image: ${fullSrc}`);
                         container.classList.remove('loading');
                         container.classList.add('load-error');
                     };
-
-                    // Set the src to begin the download.
                     fullImage.src = fullSrc;
-
-                    // If the image is already in the browser cache, the 'load' event
-                    // may have already fired. The 'complete' property will be true
-                    // in this case, so we manually call the handler.
-                    if (fullImage.complete) {
-                        swapToFullRes();
-                    }
                 } else {
-                    // If there is no full-res image, just remove the loading state.
                     container.classList.remove('loading');
                 }
             };
 
-            // Attach the onload handler for the thumbnail BEFORE setting its src.
             img.onload = handleThumbnailLoad;
-
-            // Set the src to initiate the thumbnail download.
             img.src = thumbnailSrc;
-            
-            // Handle the case where the thumbnail itself is already cached.
-            if (img.complete) {
-                handleThumbnailLoad();
-            }
+            if (img.complete) handleThumbnailLoad();
 
-            // The loading process has been initiated, so we can stop observing.
+            // Add visible class for stagger animation
+            container.classList.add('visible');
+
             observer.unobserve(container);
         }
     });
-}, observerOptions);
+}, { rootMargin: '100px', threshold: 0.05 });
 
 
 /**
- * Shuffles an array in place and returns a new array containing the first `count` items.
- * Uses the Fisher-Yates (aka Knuth) shuffle algorithm for an unbiased shuffle.
- * @param {Array} array The array to shuffle.
- * @param {number} count The number of items to return from the shuffled array.
- * @returns {Array} A new array with `count` random items.
- */
-function shuffleAndPick(array, count) {
-    const shuffled = [...array]; // Create a shallow copy to avoid modifying the original.
-    let currentIndex = shuffled.length;
-    let randomIndex;
-
-    // While there remain elements to shuffle.
-    while (currentIndex !== 0) {
-        // Pick a remaining element.
-        randomIndex = Math.floor(Math.random() * currentIndex);
-        currentIndex--;
-
-        // And swap it with the current element.
-        [shuffled[currentIndex], shuffled[randomIndex]] = [
-            shuffled[randomIndex], shuffled[currentIndex]];
-    }
-
-    return shuffled.slice(0, count);
-}
-
-/**
- * Renders the hero carousel with placeholders for lazy loading.
- * @param {Array} featuredPhotos - An array of photo objects for the carousel.
+ * Renders the hero carousel.
+ * LOGIC UPDATE: Selects the top 5 newest photos deterministically.
  */
 function renderCarousel(featuredPhotos) {
     if (!carouselTrack || !featuredPhotos || featuredPhotos.length === 0) {
@@ -132,21 +77,24 @@ function renderCarousel(featuredPhotos) {
         if (heroCarousel) heroCarousel.style.display = 'none';
         return;
     }
+    
     carouselTrack.innerHTML = '';
     carouselNav.innerHTML = '';
 
-    featuredPhotos.forEach(photo => {
+    featuredPhotos.forEach((photo, index) => {
         const slide = document.createElement('div');
         slide.className = 'carousel-slide loading';
+        
+        // Background image for the blur effect
         slide.style.backgroundImage = `url(${photo.thumbnail_url})`;
 
         const img = document.createElement('img');
-        // Use a placeholder src and store the real sources in data attributes
         img.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
         img.dataset.src = photo.thumbnail_url;
         img.dataset.fullSrc = photo.full_url;
-        img.alt = 'Featured Image';
-        img.style.opacity = 0; // Set initial opacity to 0 for fade-in
+        img.alt = 'Featured Portfolio Image';
+        // Prevent default drag to allow our custom swipe logic
+        img.addEventListener('dragstart', (e) => e.preventDefault());
 
         const spinner = document.createElement('div');
         spinner.className = 'loader-spinner';
@@ -154,38 +102,39 @@ function renderCarousel(featuredPhotos) {
         slide.append(img, spinner);
         carouselTrack.appendChild(slide);
 
-        // Add the slide to the observer to be lazy-loaded
         lazyLoadObserver.observe(slide);
 
-        img.addEventListener('click', () => {
-            if (!slide.classList.contains('loading')) {
+        // Click to open lightbox (only if not dragging)
+        img.addEventListener('click', (e) => {
+            if (!slide.classList.contains('loading') && !isDragging) {
                 openLightbox(photo.full_url);
             }
         });
 
+        // Indicators
         const dot = document.createElement('button');
         dot.className = 'carousel-indicator';
+        dot.ariaLabel = `Go to slide ${index + 1}`;
         carouselNav.appendChild(dot);
+        dot.addEventListener('click', () => {
+            moveToSlide(index);
+            pauseAutoPlay();
+        });
     });
 
     slides = Array.from(carouselTrack.children);
     dots = Array.from(carouselNav.children);
 
     if (slides.length > 0) {
-        dots.forEach((dot, index) => {
-            dot.addEventListener('click', () => {
-                moveToSlide(index);
-                resetSlideInterval();
-            });
-        });
         moveToSlide(0);
         startSlideInterval();
+        initTouchGestures();
     }
 }
 
 /**
- * Renders the masonry gallery grid with placeholders for lazy loading.
- * @param {Array} galleryPhotos - An array of all photo objects for the gallery.
+ * Renders the masonry gallery.
+ * LOGIC UPDATE: Renders photos in the order received (Newest First).
  */
 function renderGallery(galleryPhotos) {
     galleryContainer.innerHTML = '';
@@ -193,17 +142,18 @@ function renderGallery(galleryPhotos) {
         galleryContainer.innerHTML = '<p class="status-message">No photos found.</p>';
         return;
     }
-    galleryPhotos.forEach(photo => {
+    
+    galleryPhotos.forEach((photo, index) => {
         const galleryItem = document.createElement('div');
         galleryItem.className = 'gallery-item loading';
+        // Add a slight stagger to the animation delay based on index
+        galleryItem.style.transitionDelay = `${(index % 5) * 50}ms`;
 
         const img = document.createElement('img');
-        // Use a placeholder src and store the real sources in data attributes
         img.src = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
         img.dataset.src = photo.thumbnail_url;
         img.dataset.fullSrc = photo.full_url;
         img.alt = 'Portfolio Image';
-        img.style.opacity = 0; // Set initial opacity to 0 for fade-in
 
         const spinner = document.createElement('div');
         spinner.className = 'loader-spinner';
@@ -211,7 +161,6 @@ function renderGallery(galleryPhotos) {
         galleryItem.append(img, spinner);
         galleryContainer.appendChild(galleryItem);
         
-        // Add the item to the observer to be lazy-loaded
         lazyLoadObserver.observe(galleryItem);
 
         img.addEventListener('click', () => {
@@ -222,50 +171,123 @@ function renderGallery(galleryPhotos) {
     });
 }
 
-// --- Carousel Logic ---
+// --- Carousel Logic & Swipe Support ---
+
 const moveToSlide = (targetIndex) => {
     if (!carouselTrack || slides.length === 0) return;
-    carouselTrack.style.transform = `translateX(-${targetIndex * 100}%)`;
-    if(dots[currentSlide]) dots[currentSlide].classList.remove('current-slide');
-    if(dots[targetIndex]) dots[targetIndex].classList.add('current-slide');
+    
     currentSlide = targetIndex;
+    currentTranslate = currentSlide * -100;
+    prevTranslate = currentTranslate;
+    
+    carouselTrack.style.transform = `translateX(${currentTranslate}%)`;
+    
+    dots.forEach(d => d.classList.remove('current-slide'));
+    if(dots[currentSlide]) dots[currentSlide].classList.add('current-slide');
 };
+
+const nextSlide = () => {
+    const next = (currentSlide + 1) % slides.length;
+    moveToSlide(next);
+};
+
+const prevSlide = () => {
+    const prev = (currentSlide - 1 + slides.length) % slides.length;
+    moveToSlide(prev);
+};
+
 const startSlideInterval = () => {
-    slideInterval = setInterval(() => moveToSlide((currentSlide + 1) % slides.length), 5000);
-};
-const resetSlideInterval = () => {
     clearInterval(slideInterval);
-    startSlideInterval();
+    slideInterval = setInterval(nextSlide, autoPlayDelay);
 };
+
+const pauseAutoPlay = () => {
+    clearInterval(slideInterval);
+    // Restart after 10 seconds of inactivity
+    slideInterval = setInterval(nextSlide, 10000);
+};
+
+// --- Touch / Swipe Implementation ---
+function initTouchGestures() {
+    const track = carouselTrack;
+    
+    // Touch events
+    track.addEventListener('touchstart', touchStart);
+    track.addEventListener('touchend', touchEnd);
+    track.addEventListener('touchmove', touchMove);
+    
+    // Mouse events (for desktop dragging)
+    track.addEventListener('mousedown', touchStart);
+    track.addEventListener('mouseup', touchEnd);
+    track.addEventListener('mouseleave', () => {
+        if(isDragging) touchEnd();
+    });
+    track.addEventListener('mousemove', touchMove);
+}
+
+function getPositionX(event) {
+    return event.type.includes('mouse') ? event.pageX : event.touches[0].clientX;
+}
+
+function touchStart(index) {
+    return function(event) {
+        isDragging = true;
+        startPos = getPositionX(event);
+        carouselTrack.style.transition = 'none'; // Remove transition for instant drag following
+        pauseAutoPlay();
+    }
+}
+
+function touchMove(event) {
+    if (isDragging) {
+        const currentPosition = getPositionX(event);
+        const diff = currentPosition - startPos;
+        // Calculate percentage movement based on container width
+        const containerWidth = carouselTrack.clientWidth;
+        const movePercent = (diff / containerWidth) * 100;
+        
+        carouselTrack.style.transform = `translateX(${prevTranslate + movePercent}%)`;
+    }
+}
+
+function touchEnd() {
+    isDragging = false;
+    carouselTrack.style.transition = 'transform 0.5s ease-out';
+    
+    const movedBy = currentTranslate - parseFloat(carouselTrack.style.transform.replace('translateX(', '').replace('%)', ''));
+    
+    // If moved by more than 15%, change slide
+    if (movedBy < -15) {
+        prevSlide();
+    } else if (movedBy > 15) {
+        nextSlide();
+    } else {
+        moveToSlide(currentSlide);
+    }
+}
+
 
 /**
- * Initializes all UI components. It randomizes featured photos from the main
- * list before rendering the carousel and gallery.
- * @param {Array} allPhotos - The complete, sorted list of photos from the API.
+ * Initializes all UI components.
  */
 export function initUI(allPhotos) {
-    // --- Randomization Logic ---
-    const totalPhotos = allPhotos.length;
-    const poolSize = Math.max(5, Math.floor(totalPhotos * 0.20));
-    const carouselPool = allPhotos.slice(0, poolSize);
-    const numFeatured = Math.min(5, carouselPool.length);
-    const featuredPhotos = shuffleAndPick(carouselPool, numFeatured);
+    // LOGIC CHANGE: No more shuffle. Pick top 5 newest.
+    // Ensure allPhotos are sorted (API should have done this, but we slice the top).
+    const featuredPhotos = allPhotos.slice(0, 5);
 
-    // The gallery always shows all photos.
-    const galleryPhotos = allPhotos;
-    
-    // --- Rendering ---
+    // Render components
     renderCarousel(featuredPhotos);
-    renderGallery(galleryPhotos);
+    renderGallery(allPhotos);
 
+    // Carousel Button Listeners
     if (prevButton && nextButton) {
         prevButton.addEventListener('click', () => {
-            moveToSlide((currentSlide - 1 + slides.length) % slides.length);
-            resetSlideInterval();
+            prevSlide();
+            pauseAutoPlay();
         });
         nextButton.addEventListener('click', () => {
-            moveToSlide((currentSlide + 1) % slides.length);
-            resetSlideInterval();
+            nextSlide();
+            pauseAutoPlay();
         });
     }
 }

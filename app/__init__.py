@@ -26,6 +26,7 @@ THUMBNAIL_MAX_WIDTH = 400
 def _get_datetime_from_key(object_key):
     """
     Extracts a datetime object from an object key (filename).
+    Returns datetime.min if pattern not found, allowing fallback to LastModified.
     """
     match = re.search(r'(\d{8})_(\d{6})', object_key)
     if match:
@@ -47,8 +48,6 @@ def _calculate_gallery_etag(objects):
     concatenated_etags = "".join(etags)
 
     # Add a time-based salt to the ETag that changes every 30 minutes (1800s).
-    # This forces clients to refetch the API response and get new presigned URLs
-    # before the old ones expire (which have a 60-minute lifetime).
     time_salt = str(int(time.time() // 1800))
     
     # Combine content hash with time salt for the final ETag.
@@ -104,11 +103,11 @@ def create_app():
                     cache_is_valid = True
             
             if cache_is_valid:
-                # Load object list and ETag from the file cache
+                # Load object list from the file cache
                 with open(API_CACHE_FILE, 'r') as f:
                     cached_data = json.load(f)
                 sorted_objects = cached_data['objects']
-                current_etag = _calculate_gallery_etag(sorted_objects) # ETag is recalculated with time salt
+                current_etag = _calculate_gallery_etag(sorted_objects)
             else:
                 # Cache is invalid or missing, fetch fresh from OCI
                 bucket_name = app.config['OCI_BUCKET_NAME']
@@ -121,14 +120,28 @@ def create_app():
                         all_objects.extend(page['Contents'])
                 
                 # Convert datetime objects to strings for JSON serialization
+                # We need to keep the original LastModified datetime for sorting first
                 for obj in all_objects:
-                    obj['LastModified'] = obj['LastModified'].isoformat()
+                    # Ensure timezone info is handled or normalized if necessary
+                    pass
                 
-                sorted_objects = sorted(all_objects, key=lambda obj: _get_datetime_from_key(obj['Key']), reverse=True)
+                # Sort logic: 
+                # 1. Date extracted from filename (primary)
+                # 2. S3 LastModified Metadata (fallback)
+                # We sort Descending (reverse=True) for Newest First.
+                sorted_objects = sorted(
+                    all_objects, 
+                    key=lambda obj: (_get_datetime_from_key(obj['Key']), obj['LastModified']), 
+                    reverse=True
+                )
+
+                # Now serialize the LastModified date for JSON
+                for obj in sorted_objects:
+                    obj['LastModified'] = obj['LastModified'].isoformat()
+
                 current_etag = _calculate_gallery_etag(sorted_objects)
 
                 # Write the fresh data to the cache file atomically
-                # Note: We don't store the time-salted ETag in the file, only the object list
                 cache_payload = {'objects': sorted_objects}
                 temp_file_path = API_CACHE_FILE + f".tmp-{os.getpid()}"
                 with open(temp_file_path, 'w') as f:
@@ -205,7 +218,12 @@ def create_app():
                             img = img.rotate(90, expand=True)
 
                 img.thumbnail((THUMBNAIL_MAX_WIDTH, THUMBNAIL_MAX_WIDTH * 10))
-                img.save(thumbnail_path, "JPEG", quality=85, optimize=True)
+                # Strip metadata to save space, optimize
+                data = list(img.getdata())
+                image_without_exif = Image.new(img.mode, img.size)
+                image_without_exif.putdata(data)
+                
+                image_without_exif.save(thumbnail_path, "JPEG", quality=85, optimize=True)
             
             os.remove(temp_original_path)
             

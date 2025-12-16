@@ -2,45 +2,64 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
     <meta name="description" content="{{ content.meta_description }}">
     <title>{{ content.title }}</title>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Lato:wght@300;400;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet">
+    
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
-    <link rel="icon" href="data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3e%3cpath d='M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z' fill='none' stroke='%23c9d1d9' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3e%3ccircle cx='12' cy='13' r='4' fill='none' stroke='%23c9d1d9' stroke-width='2'/%3e%3c/svg%3e">
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5977125521868950"
-     crossorigin="anonymous"></script>
+    <link rel="icon" href="data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3e%3cpath d='M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z' fill='none' stroke='%23d4af37' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3e%3ccircle cx='12' cy='13' r='4' fill='none' stroke='%23d4af37' stroke-width='2'/%3e%3c/svg%3e">
+    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5977125521868950" crossorigin="anonymous"></script>
 </head>
 <body>
 
     <header class="header">
-        <h1>{{ content.title }}</h1>
-        <nav class="nav">
-            <a href="#gallery">Work</a>
-            <a href="#about">About</a>
-            <a href="#contact">Contact</a>
-        </nav>
+        <div class="header-inner">
+            <h1 class="logo">{{ content.title }}</h1>
+            <nav class="nav">
+                <a href="#gallery">Portfolio</a>
+                <a href="#about">About</a>
+                <a href="#contact">Contact</a>
+            </nav>
+        </div>
     </header>
 
     <main>
         <section id="gallery" class="gallery-section">
             
             <!-- Hero Carousel -->
-            <div class="hero-carousel" aria-label="Featured Photos">
+            <div class="hero-carousel" aria-label="Latest Work">
                 <div class="carousel-track">
                     <!-- Carousel slides will be dynamically inserted here -->
                 </div>
-                <button class="carousel-button prev" aria-label="Previous Slide">&#10094;</button>
-                <button class="carousel-button next" aria-label="Next Slide">&#10095;</button>
+                
+                <div class="carousel-controls">
+                    <button class="carousel-button prev" aria-label="Previous Slide">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+                    </button>
+                    <button class="carousel-button next" aria-label="Next Slide">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+                    </button>
+                </div>
+
                 <div class="carousel-nav">
                     <!-- Carousel indicators will be dynamically inserted here -->
                 </div>
             </div>
 
             <!-- Masonry Grid -->
-            <div id="gallery-container" class="gallery-container">
-                <p class="status-message">Loading Photos...</p>
+            <div class="gallery-wrapper">
+                <div id="gallery-container" class="gallery-container">
+                    <p class="status-message">Loading Collection...</p>
+                </div>
             </div>
         </section>
+
+        <div class="content-divider"></div>
 
         <section id="about" class="content-section">
             <h2>{{ content.about_heading }}</h2>
@@ -49,9 +68,9 @@
             </div>
         </section>
 
-        <section id="contact" class="content-section">
+        <section id="contact" class="content-section contact-section">
             <h2>{{ content.contact_heading }}</h2>
-            <p>For inquiries or collaborations, please email me.</p>
+            <p>Available for commissions and collaborations.</p>
             <a href="mailto:{{ content.contact_email }}" class="contact-email">{{ content.contact_email }}</a>
         </section>
     </main>
@@ -63,7 +82,7 @@
     <!-- Lightbox container, hidden by default -->
     <div id="lightbox" class="lightbox">
         <span class="lightbox-close">&times;</span>
-        <img class="lightbox-content" id="lightbox-img">
+        <img class="lightbox-content" id="lightbox-img" alt="Fullscreen view">
         <div class="lightbox-controls">
             <button id="zoom-in-btn" title="Zoom In">+</button>
             <button id="zoom-out-btn" title="Zoom Out">-</button>

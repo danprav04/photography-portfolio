@@ -6,7 +6,7 @@ const gearList = [
     {
       id: "camera-xs20",
       name: "FUJIFILM X-S20 Mirrorless Camera Body",
-      asin: "B0C5P9N74W", 
+      asin: "B0DYM86YCN", 
       type: "amazon"
     },
     
@@ -14,19 +14,19 @@ const gearList = [
     {
       id: "lens-23mm",
       name: "Viltrox 23mm F1.4 Lens",
-      asin: "B08N4M6B5N", 
+      asin: "B088WJ9MVY", 
       type: "amazon"
     },
     {
       id: "lens-35mm",
       name: "FUJIFILM XC 35mm F2 Lens",
-      asin: "B084BH26K7",
+      asin: "B08412XPWK",
       type: "amazon"
     },
     {
       id: "lens-70300",
       name: "FUJIFILM XF 70-300mm F4-5.6 R LM OIS WR",
-      asin: "B08WPRK55Y",
+      asin: "B08TMZ59ZW",
       type: "amazon"
     },
   
@@ -34,7 +34,7 @@ const gearList = [
     {
       id: "clean-kit",
       name: "K&F Concept Camera Cleaning Kit",
-      asin: "B099K587G6", 
+      asin: "B0FC28VCYM", 
       type: "amazon"
     },
     {
@@ -46,23 +46,16 @@ const gearList = [
     {
       id: "tripod",
       name: "Benro Slim Tripod",
-      asin: "B07537FXFM",
+      asin: "B072K62KMH",
       type: "amazon"
     },
     
-    // --- DIRECT LINKS ---
     {
       id: "bag",
       name: "K&F Concept Sling Bag 10L",
-      url: "https://www.aliexpress.com/item/YOUR_LINK_HERE", 
-      type: "direct"
+      asin: "B072K62KMH",
+      type: "amazon"
     },
-    {
-      id: "battery",
-      name: "K&F Concept NP-W235 USB-C Battery",
-      url: "https://www.aliexpress.com/item/YOUR_LINK_HERE",
-      type: "direct"
-    }
   ];
   
   // ---------------------------------------------------------

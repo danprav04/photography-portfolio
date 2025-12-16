@@ -59,7 +59,7 @@ const gearList = [
     {
       id: "bag",
       name: "K&F Concept Sling Bag 10L",
-      description: "Holds the camera + 2 lenses comfortably. Great for day trips.",
+      description: "Holds the camera + 3 lenses comfortably. Great for day trips.",
       asin: "B072K62KMH",
       type: "amazon"
     },

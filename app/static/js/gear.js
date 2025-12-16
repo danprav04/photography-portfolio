@@ -37,9 +37,9 @@ const gearList = [
     // --- ACCESSORIES ---
     {
       id: "clean-kit",
-      name: "K&F Concept Camera Cleaning Kit",
+      name: "VSGO APS-C Digital Camera Sensor Cleaning Kit",
       description: "Essential maintenance tools to keep sensors and glass dust-free.",
-      asin: "B0FC28VCYM", 
+      asin: "B08P3BKJQQ", 
       type: "amazon"
     },
     {

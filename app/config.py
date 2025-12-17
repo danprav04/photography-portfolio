@@ -33,6 +33,7 @@ class Config:
     PORTFOLIO_ABOUT_CONTENT = content_config.get('PORTFOLIO_ABOUT_CONTENT', 'Welcome to my portfolio.')
     PORTFOLIO_CONTACT_HEADING = content_config.get('PORTFOLIO_CONTACT_HEADING', 'Contact')
     PORTFOLIO_CONTACT_EMAIL = content_config.get('PORTFOLIO_CONTACT_EMAIL', 'email@example.com')
+    PORTFOLIO_INSTAGRAM_URL = content_config.get('PORTFOLIO_INSTAGRAM_URL', '')
     PORTFOLIO_FOOTER_TEXT = content_config.get('PORTFOLIO_FOOTER_TEXT', '© 2025 Me. All rights reserved.')
     
     # --- AFFILIATE CONFIGURATION ---

@@ -213,7 +213,14 @@ main {
     margin-bottom: 1rem;
 }
 
-.contact-email {
+.contact-links {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+}
+
+.contact-link {
     display: inline-block;
     font-size: 1.6rem;
     color: var(--accent-color);
@@ -224,7 +231,7 @@ main {
     transition: all var(--transition-speed) ease;
 }
 
-.contact-email:hover {
+.contact-link:hover {
     color: var(--accent-hover);
     border-bottom-color: var(--accent-hover);
 }

@@ -117,7 +117,6 @@ def process_single_object(obj, bucket_name):
     key = obj['Key']
     
     # 1. Try to get metadata (Dimensions + EXIF Date)
-    # We do this first because we need dimensions for the frontend layout stability.
     meta = _extract_image_metadata(bucket_name, key)
     
     date_obj = meta['date']
@@ -168,6 +167,7 @@ def create_app():
             'about_content': app.config['PORTFOLIO_ABOUT_CONTENT'],
             'contact_heading': app.config['PORTFOLIO_CONTACT_HEADING'],
             'contact_email': app.config['PORTFOLIO_CONTACT_EMAIL'],
+            'instagram_url': app.config['PORTFOLIO_INSTAGRAM_URL'],
             'footer_text': app.config['PORTFOLIO_FOOTER_TEXT'],
             'amazon_tag': app.config['AMAZON_TAG'],
             'disclaimer_text': app.config['PORTFOLIO_DISCLAIMER_TEXT']
@@ -176,40 +176,29 @@ def create_app():
 
     @app.route('/api/photo/<path:object_key>')
     def get_single_photo(object_key):
-        """
-        API endpoint to retrieve a presigned URL for a single specific photo.
-        """
+        """API endpoint to retrieve a presigned URL for a single specific photo."""
         try:
-            # We explicitly check if the object exists
             s3_client.head_object(Bucket=app.config['OCI_BUCKET_NAME'], Key=object_key)
-            
             full_url = s3_client.generate_presigned_url(
                 'get_object',
                 Params={'Bucket': app.config['OCI_BUCKET_NAME'], 'Key': object_key},
                 ExpiresIn=3600
             )
-            
             return jsonify({
                 'key': object_key,
                 'full_url': full_url,
                 'thumbnail_url': url_for('get_thumbnail', object_key=object_key, _external=False)
             })
-            
         except ClientError as e:
-            error_code = e.response.get("Error", {}).get("Code")
-            if error_code == '404':
+            if e.response.get("Error", {}).get("Code") == '404':
                 return jsonify({'error': 'Photo not found'}), 404
-            print(f"S3 Client Error for single photo: {e}")
             return jsonify({"error": "Could not retrieve photo."}), 500
-        except Exception as e:
-            print(f"Unexpected Error for single photo: {e}")
+        except Exception:
             return jsonify({"error": "Internal server error."}), 500
 
     @app.route('/api/photos', methods=['GET', 'HEAD'])
     def get_photos():
-        """
-        API endpoint to retrieve sorted photo data.
-        """
+        """API endpoint to retrieve sorted photo data."""
         try:
             cache_is_valid = False
             if os.path.exists(API_CACHE_FILE):
@@ -218,17 +207,13 @@ def create_app():
                     cache_is_valid = True
             
             if cache_is_valid:
-                # --- FAST PATH: Read from Cache ---
                 with open(API_CACHE_FILE, 'r') as f:
                     cached_data = json.load(f)
                 sorted_objects = cached_data['objects']
                 current_etag = _calculate_gallery_etag(sorted_objects)
             else:
-                # --- SLOW PATH: Build Cache ---
-                print("Cache expired or missing. building photo list (this may take time)...")
+                print("Cache expired or missing. building photo list...")
                 bucket_name = app.config['OCI_BUCKET_NAME']
-                
-                # 1. List all objects
                 paginator = s3_client.get_paginator('list_objects_v2')
                 pages = paginator.paginate(Bucket=bucket_name)
                 
@@ -238,29 +223,23 @@ def create_app():
                         raw_objects.extend(page['Contents'])
                 
                 processed_objects = []
-                
-                # 2. Process objects in parallel
                 with ThreadPoolExecutor(max_workers=20) as executor:
                     future_to_obj = {
                         executor.submit(process_single_object, obj, bucket_name): obj 
                         for obj in raw_objects
                     }
-                    
                     for future in as_completed(future_to_obj):
                         try:
-                            result = future.result()
-                            processed_objects.append(result)
+                            processed_objects.append(future.result())
                         except Exception as e:
                             print(f"Error processing object: {e}")
 
-                # 3. Sort Descending (Newest First)
                 sorted_objects = sorted(
                     processed_objects, 
                     key=lambda x: x['sort_date'], 
                     reverse=True
                 )
 
-                # 4. Save to Cache
                 temp_file_path = API_CACHE_FILE + f".tmp-{os.getpid()}"
                 with open(temp_file_path, 'w') as f:
                     json.dump({'objects': sorted_objects}, f)
@@ -270,12 +249,10 @@ def create_app():
                 os.rename(temp_file_path, API_CACHE_FILE)
                 
                 current_etag = _calculate_gallery_etag(sorted_objects)
-                print(f"Cache rebuilt successfully with {len(sorted_objects)} photos.")
 
             if not current_etag:
                 return jsonify([])
 
-            # Client Cache Validation
             if_none_match = request.headers.get('If-None-Match')
             if if_none_match and if_none_match == current_etag:
                 return make_response(), 304
@@ -286,7 +263,6 @@ def create_app():
                 response.headers['Cache-Control'] = f'public, max-age={CACHE_EXPIRATION_SECONDS}'
                 return response
 
-            # Generate Presigned URLs
             photo_data = []
             for obj in sorted_objects:
                 key = obj['Key']
@@ -307,18 +283,13 @@ def create_app():
             response.headers['Cache-Control'] = f'public, max-age={CACHE_EXPIRATION_SECONDS}'
             return response
             
-        except ClientError as e:
-            print(f"S3 Client Error: {e}")
-            return jsonify({"error": "Could not retrieve photos."}), 500
         except Exception as e:
-            print(f"Unexpected Error: {e}")
+            print(f"Error: {e}")
             return jsonify({"error": "Internal server error."}), 500
 
     @app.route('/api/thumbnail/<path:object_key>')
     def get_thumbnail(object_key):
-        """
-        Generates and serves a cached thumbnail for a given S3 object key.
-        """
+        """Generates and serves a cached thumbnail."""
         sanitized_key = re.sub(r'[^a-zA-Z0-9_.-]', '_', object_key)
         thumbnail_path = os.path.join(THUMBNAIL_CACHE_DIR, sanitized_key)
 
@@ -327,28 +298,20 @@ def create_app():
 
         try:
             bucket_name = app.config['OCI_BUCKET_NAME']
-            
-            # Download image to memory
             response = s3_client.get_object(Bucket=bucket_name, Key=object_key)
             image_data = response['Body'].read()
             
             with Image.open(io.BytesIO(image_data)) as img:
-                # Fix orientation based on EXIF
                 if hasattr(img, '_getexif'):
                     exif = img._getexif()
                     if exif:
                         orientation = exif.get(EXIF_ORIENTATION)
-                        if orientation == 3:
-                            img = img.rotate(180, expand=True)
-                        elif orientation == 6:
-                            img = img.rotate(270, expand=True)
-                        elif orientation == 8:
-                            img = img.rotate(90, expand=True)
+                        if orientation == 3: img = img.rotate(180, expand=True)
+                        elif orientation == 6: img = img.rotate(270, expand=True)
+                        elif orientation == 8: img = img.rotate(90, expand=True)
 
-                # Resize
                 img.thumbnail((THUMBNAIL_MAX_WIDTH, THUMBNAIL_MAX_WIDTH * 10))
                 
-                # Save optimized JPEG
                 data = list(img.getdata())
                 image_without_exif = Image.new(img.mode, img.size)
                 image_without_exif.putdata(data)
@@ -357,9 +320,6 @@ def create_app():
             
             return send_from_directory(THUMBNAIL_CACHE_DIR, sanitized_key)
 
-        except ClientError as e:
-            print(f"Error downloading {object_key} for thumbnail: {e}")
-            return "Error generating thumbnail", 500
         except Exception as e:
             print(f"Error processing image {object_key}: {e}")
             return "Error processing image", 500

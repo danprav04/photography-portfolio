@@ -25,6 +25,9 @@
                 <a href="#about">About</a>
                 <a href="#gear">Gear</a>
                 <a href="#contact">Contact</a>
+                {% if content.instagram_url %}
+                <a href="{{ content.instagram_url }}" target="_blank" rel="noopener noreferrer">Instagram</a>
+                {% endif %}
             </nav>
         </div>
     </header>
@@ -83,7 +86,14 @@
 
         <section id="contact" class="content-section contact-section">
             <h2>{{ content.contact_heading }}</h2>
-            <a href="mailto:{{ content.contact_email }}" class="contact-email">{{ content.contact_email }}</a>
+            <div class="contact-links">
+                <a href="mailto:{{ content.contact_email }}" class="contact-link">{{ content.contact_email }}</a>
+                {% if content.instagram_url %}
+                <a href="{{ content.instagram_url }}" target="_blank" rel="noopener noreferrer" class="contact-link">
+                    Instagram
+                </a>
+                {% endif %}
+            </div>
         </section>
     </main>
 

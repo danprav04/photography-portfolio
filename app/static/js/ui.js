@@ -97,6 +97,7 @@ function renderCarousel(featuredPhotos) {
         img.dataset.src = photo.thumbnail_url;
         img.dataset.fullSrc = photo.full_url;
         img.alt = 'Featured Portfolio Image';
+        
         // Prevent default drag to allow our custom swipe logic
         img.addEventListener('dragstart', (e) => e.preventDefault());
 
@@ -190,6 +191,13 @@ function renderGallery(galleryPhotos) {
         img.dataset.src = photo.thumbnail_url;
         img.dataset.fullSrc = photo.full_url;
         img.alt = 'Portfolio Image';
+
+        // ASPECT RATIO FIX: Set aspect ratio if dimensions are available from API.
+        // This reserves vertical space immediately, preventing layout shift and
+        // ensuring scroll-to-anchor works correctly on load.
+        if (photo.width && photo.height) {
+            img.style.aspectRatio = `${photo.width} / ${photo.height}`;
+        }
 
         const spinner = document.createElement('div');
         spinner.className = 'loader-spinner';

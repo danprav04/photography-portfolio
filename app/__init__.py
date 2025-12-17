@@ -19,7 +19,8 @@ s3_client = None
 CACHE_BASE_DIR = os.path.join(os.path.dirname(__file__), '..', 'cache')
 THUMBNAIL_CACHE_DIR = os.path.join(CACHE_BASE_DIR, 'thumbnails')
 API_CACHE_DIR = os.path.join(CACHE_BASE_DIR, 'api')
-API_CACHE_FILE = os.path.join(API_CACHE_DIR, 'gallery_cache.json')
+# Version 2 cache file to ensure width/height metadata is rebuilt
+API_CACHE_FILE = os.path.join(API_CACHE_DIR, 'gallery_cache_v2.json')
 
 # Cache expires every 24 hours because EXIF extraction is network/CPU intensive.
 # Manually delete cache/api/gallery_cache.json to force a refresh sooner.
@@ -27,6 +28,7 @@ CACHE_EXPIRATION_SECONDS = 86400
 
 THUMBNAIL_MAX_WIDTH = 400
 EXIF_DATETIME_ORIGINAL = 36867
+EXIF_ORIENTATION = 274
 
 def _calculate_gallery_etag(objects):
     """
@@ -67,40 +69,60 @@ def _get_date_from_filename(object_key):
             
     return None
 
-def _extract_exif_date(bucket_name, key):
+def _extract_image_metadata(bucket_name, key):
     """
-    Downloads the image into memory and extracts the DateTimeOriginal EXIF tag.
-    Returns None if extraction fails or tag is missing.
+    Downloads the image into memory and extracts Dimensions and DateTimeOriginal.
+    Handles orientation to ensure width/height match the visual aspect ratio.
+    Returns a dict with 'date', 'width', and 'height'.
     """
+    meta = {'date': None, 'width': None, 'height': None}
     try:
         # Download image to memory (avoid disk I/O)
         response = s3_client.get_object(Bucket=bucket_name, Key=key)
         image_data = response['Body'].read()
         
         with Image.open(io.BytesIO(image_data)) as img:
+            # Get raw dimensions
+            width, height = img.size
+            meta['width'] = width
+            meta['height'] = height
+
             exif_data = img._getexif()
             if exif_data:
+                # Extract Date
                 date_str = exif_data.get(EXIF_DATETIME_ORIGINAL)
                 if date_str:
-                    # Standard EXIF format: "YYYY:MM:DD HH:MM:SS"
-                    return datetime.strptime(date_str, '%Y:%m:%d %H:%M:%S')
+                    try:
+                        # Standard EXIF format: "YYYY:MM:DD HH:MM:SS"
+                        meta['date'] = datetime.strptime(date_str, '%Y:%m:%d %H:%M:%S')
+                    except ValueError:
+                        pass
+                
+                # Extract Orientation and swap dimensions if needed
+                orientation = exif_data.get(EXIF_ORIENTATION)
+                # 6 = Rotate 90 CW, 8 = Rotate 270 CW
+                if orientation in (6, 8):
+                    meta['width'], meta['height'] = height, width
+
     except Exception:
         # Silently fail on non-images or corrupt metadata
         pass
-    return None
+    return meta
 
 def process_single_object(obj, bucket_name):
     """
-    Worker function to determine the sort date for a single S3 object.
+    Worker function to determine the sort date and dimensions for a single S3 object.
     Priority: EXIF > Filename Regex > S3 LastModified.
     """
     key = obj['Key']
     
-    # 1. Try EXIF (Most accurate, but requires download)
-    # We do this first because filenames like "10.jpg" are unreliable.
-    date_obj = _extract_exif_date(bucket_name, key)
+    # 1. Try to get metadata (Dimensions + EXIF Date)
+    # We do this first because we need dimensions for the frontend layout stability.
+    meta = _extract_image_metadata(bucket_name, key)
     
-    # 2. Try Filename (Fast fallback)
+    date_obj = meta['date']
+    
+    # 2. Try Filename (Fast fallback for date)
     if not date_obj:
         date_obj = _get_date_from_filename(key)
         
@@ -112,7 +134,9 @@ def process_single_object(obj, bucket_name):
     return {
         'Key': key,
         'LastModified': obj['LastModified'].isoformat(),
-        'sort_date': date_obj.isoformat()
+        'sort_date': date_obj.isoformat(),
+        'width': meta['width'],
+        'height': meta['height']
     }
 
 def create_app():
@@ -154,11 +178,9 @@ def create_app():
     def get_single_photo(object_key):
         """
         API endpoint to retrieve a presigned URL for a single specific photo.
-        Used for direct linking/sharing so the user doesn't have to wait for the whole list.
         """
         try:
-            # We explicitly check if the object exists to return 404 cleanly
-            # instead of generating a broken link.
+            # We explicitly check if the object exists
             s3_client.head_object(Bucket=app.config['OCI_BUCKET_NAME'], Key=object_key)
             
             full_url = s3_client.generate_presigned_url(
@@ -218,8 +240,6 @@ def create_app():
                 processed_objects = []
                 
                 # 2. Process objects in parallel
-                # We use a thread pool to download multiple images concurrently for EXIF extraction.
-                # 20 workers balances speed with memory usage.
                 with ThreadPoolExecutor(max_workers=20) as executor:
                     future_to_obj = {
                         executor.submit(process_single_object, obj, bucket_name): obj 
@@ -233,7 +253,7 @@ def create_app():
                         except Exception as e:
                             print(f"Error processing object: {e}")
 
-                # 3. Sort Descending (Newest First) based on derived sort_date
+                # 3. Sort Descending (Newest First)
                 sorted_objects = sorted(
                     processed_objects, 
                     key=lambda x: x['sort_date'], 
@@ -241,7 +261,6 @@ def create_app():
                 )
 
                 # 4. Save to Cache
-                # We write to a temp file then rename for atomic write
                 temp_file_path = API_CACHE_FILE + f".tmp-{os.getpid()}"
                 with open(temp_file_path, 'w') as f:
                     json.dump({'objects': sorted_objects}, f)
@@ -256,7 +275,7 @@ def create_app():
             if not current_etag:
                 return jsonify([])
 
-            # Client Cache Validation (304 Not Modified)
+            # Client Cache Validation
             if_none_match = request.headers.get('If-None-Match')
             if if_none_match and if_none_match == current_etag:
                 return make_response(), 304
@@ -268,7 +287,6 @@ def create_app():
                 return response
 
             # Generate Presigned URLs
-            # These are generated fresh on every request because they expire (default 1h)
             photo_data = []
             for obj in sorted_objects:
                 key = obj['Key']
@@ -279,7 +297,9 @@ def create_app():
                         Params={'Bucket': app.config['OCI_BUCKET_NAME'], 'Key': key}, 
                         ExpiresIn=3600
                     ),
-                    'thumbnail_url': url_for('get_thumbnail', object_key=key, _external=False)
+                    'thumbnail_url': url_for('get_thumbnail', object_key=key, _external=False),
+                    'width': obj.get('width'),
+                    'height': obj.get('height')
                 })
             
             response = make_response(jsonify(photo_data))
@@ -317,7 +337,7 @@ def create_app():
                 if hasattr(img, '_getexif'):
                     exif = img._getexif()
                     if exif:
-                        orientation = exif.get(0x0112)
+                        orientation = exif.get(EXIF_ORIENTATION)
                         if orientation == 3:
                             img = img.rotate(180, expand=True)
                         elif orientation == 6:
@@ -329,7 +349,6 @@ def create_app():
                 img.thumbnail((THUMBNAIL_MAX_WIDTH, THUMBNAIL_MAX_WIDTH * 10))
                 
                 # Save optimized JPEG
-                # Strip metadata (exif) by creating new image
                 data = list(img.getdata())
                 image_without_exif = Image.new(img.mode, img.size)
                 image_without_exif.putdata(data)

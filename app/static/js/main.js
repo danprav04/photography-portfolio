@@ -6,27 +6,30 @@ import { initGear } from './gear.js';
 /**
  * Handles the initial scroll to a hash anchor (e.g. #gear) if present.
  * This is necessary because dynamic content (like the carousel) is inserted
- * after the page load, pushing sections down and breaking the browser's
- * native anchor scrolling.
+ * after the page load, pushing sections down.
+ * 
+ * We use requestAnimationFrame to wait for the DOM render to complete.
+ * Because we now set aspect-ratio on images, the layout height is calculated
+ * immediately, making the scroll target accurate.
  */
 function handleInitialScroll() {
     const hash = window.location.hash;
-    if (hash) {
-        // We use a small timeout to ensure the DOM updates (height calculations)
-        // from initUI have been applied by the browser engine before we scroll.
-        setTimeout(() => {
-            try {
-                const targetElement = document.querySelector(hash);
-                if (targetElement) {
-                    // Scroll the element into view. 
-                    // We use 'auto' for instant jump or 'smooth' for animation.
-                    // 'auto' is often preferred on load so the user feels they landed correctly.
-                    targetElement.scrollIntoView({ behavior: 'auto' });
+    
+    // Check if hash exists and isn't just an empty anchor or a potential photo ID (assuming IDs don't conflict with section names)
+    if (hash && hash.length > 1) {
+        // Double RAF: First one waits for JS stack to clear, second waits for layout/paint.
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                try {
+                    const targetElement = document.querySelector(hash);
+                    if (targetElement) {
+                        targetElement.scrollIntoView({ behavior: 'auto' });
+                    }
+                } catch (e) {
+                    console.warn("Could not scroll to hash:", e);
                 }
-            } catch (e) {
-                console.warn("Could not scroll to hash:", e);
-            }
-        }, 150); // 150ms buffer for layout shifts
+            });
+        });
     }
 }
 

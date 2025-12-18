@@ -94,8 +94,11 @@ const gearList = [
           link.href = getGearLink(item, amazonTag);
           link.className = 'gear-item';
           link.target = '_blank';
-          link.rel = 'noopener noreferrer';
           
+          // FIX: Removed 'noreferrer' to allow Amazon to track the source. 
+          // Kept 'noopener' for security (prevents reverse tabnabbing).
+          link.rel = 'noopener';
+
           // Container for Title and Description
           const infoDiv = document.createElement('div');
           infoDiv.className = 'gear-info';
@@ -115,7 +118,8 @@ const gearList = [
           // Icon arrow
           const icon = document.createElement('span');
           icon.className = 'gear-icon';
-          icon.innerHTML = item.type === 'amazon' ? '&#8599;' : '&rarr;'; // NE arrow for Amazon, R arrow for direct
+          icon.innerHTML = item.type === 'amazon' ? '&#8599;' : '&rarr;';
+          // NE arrow for Amazon, R arrow for direct
   
           link.appendChild(infoDiv);
           link.appendChild(icon);

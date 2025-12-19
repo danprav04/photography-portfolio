@@ -78,6 +78,7 @@ h1, h2, h3 {
 .nav {
     display: flex;
     gap: 2.5rem;
+    align-items: center;
 }
 
 .nav a {
@@ -95,7 +96,8 @@ h1, h2, h3 {
     color: var(--accent-color);
 }
 
-.nav a::after {
+/* Underline effect for text links only */
+.nav a:not(.nav-icon-link)::after {
     content: '';
     position: absolute;
     bottom: -4px;
@@ -106,8 +108,22 @@ h1, h2, h3 {
     transition: width var(--transition-speed) ease;
 }
 
-.nav a:hover::after {
+.nav a:not(.nav-icon-link)::hover::after {
     width: 100%;
+}
+
+/* Icon specific styles */
+.nav-icon-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 5px;
+}
+
+.nav-icon {
+    width: 20px;
+    height: 20px;
+    stroke-width: 2px;
 }
 
 /* --- Layout --- */
@@ -144,7 +160,7 @@ main {
 /* --- Gear Section --- */
 .gear-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); /* Slightly wider min-width to accommodate descriptions */
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
     gap: 1.5rem;
     text-align: left;
 }
@@ -152,7 +168,7 @@ main {
 .gear-item {
     display: flex;
     justify-content: space-between;
-    align-items: center; /* Keeps icon vertically centered */
+    align-items: center;
     padding: 1.25rem 1.5rem;
     background-color: var(--surface-color);
     border: 1px solid var(--border-color);
@@ -168,7 +184,6 @@ main {
     box-shadow: 0 4px 12px rgba(0,0,0,0.2);
 }
 
-/* Container for Title and Description */
 .gear-info {
     flex-grow: 1;
     display: flex;
@@ -241,7 +256,7 @@ main {
     max-width: var(--container-width);
     margin: 2rem auto 4rem;
     position: relative;
-    aspect-ratio: 21 / 9; /* Cinematic ratio */
+    aspect-ratio: 21 / 9;
     overflow: hidden;
     border-radius: 4px;
     background-color: var(--surface-color);
@@ -269,14 +284,13 @@ main {
     overflow: hidden;
 }
 
-/* Blurred background for fill */
 .carousel-slide::before {
     content: '';
     position: absolute;
     inset: 0;
     background-size: cover;
     background-position: center;
-    background-image: inherit; /* Inherits the slide bg image */
+    background-image: inherit;
     filter: blur(30px) brightness(0.4);
     transform: scale(1.1);
     z-index: 1;
@@ -300,7 +314,7 @@ main {
 }
 
 .carousel-controls {
-    pointer-events: none; /* Let clicks pass through container */
+    pointer-events: none;
     position: absolute;
     top: 0;
     left: 0;
@@ -380,7 +394,7 @@ main {
     display: flex;
     flex-direction: column;
     gap: 2rem;
-    min-width: 0; /* Prevents overflow issues in flex items */
+    min-width: 0;
 }
 
 .gallery-item {
@@ -389,7 +403,6 @@ main {
     overflow: hidden;
     background-color: var(--surface-color);
     box-shadow: 0 4px 15px rgba(0,0,0,0.2);
-    /* Initial state for entry animation */
     opacity: 0; 
     transform: translateY(20px);
     transition: transform 0.4s ease, filter 0.4s ease, opacity 0.6s ease;
@@ -406,7 +419,7 @@ main {
     height: auto;
     display: block;
     transition: transform 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-    opacity: 0; /* Handled by lazy loader */
+    opacity: 0;
 }
 
 .gallery-item img.loaded {
@@ -417,7 +430,6 @@ main {
     transform: scale(1.04);
 }
 
-/* Overlay Effect on Hover */
 .gallery-item::after {
     content: '';
     position: absolute;
@@ -432,7 +444,7 @@ main {
     opacity: 1;
 }
 
-/* Loading Spinner */
+/* Loading Spinner (Shared) */
 .loader-spinner {
     position: absolute;
     top: 50%;
@@ -447,9 +459,12 @@ main {
     z-index: 3;
     opacity: 0;
     transition: opacity 0.3s;
+    pointer-events: none;
 }
 
-.loading .loader-spinner {
+/* Show spinner when parent has loading class or if specific ID is active */
+.loading .loader-spinner,
+#lightbox-spinner.active {
     opacity: 1;
 }
 
@@ -491,11 +506,25 @@ main {
     max-height: 90vh;
     box-shadow: 0 0 50px rgba(0,0,0,0.8);
     transform: scale(0.95);
-    transition: transform 0.3s cubic-bezier(0.2, 0, 0.2, 1);
+    transition: transform 0.3s cubic-bezier(0.2, 0, 0.2, 1), opacity 0.3s ease;
+    opacity: 0; /* Hidden initially until loaded */
 }
 
 .lightbox.active .lightbox-content {
     transform: scale(1);
+}
+
+/* When image is loaded inside lightbox, we set opacity to 1 via JS */
+.lightbox-content.loaded {
+    opacity: 1;
+}
+
+/* Lightbox Spinner Specifics */
+#lightbox-spinner {
+    width: 50px;
+    height: 50px;
+    border-width: 3px;
+    z-index: 1001; /* Behind controls, above background */
 }
 
 .lightbox-close {
@@ -571,7 +600,7 @@ main {
 
 @media (max-width: 768px) {
     .header-inner { padding: 0 1.5rem; }
-    .nav { gap: 1.5rem; }
+    .nav { gap: 1.2rem; }
     .nav a { font-size: 0.8rem; }
     .hero-carousel {
         aspect-ratio: 4 / 3;
@@ -581,4 +610,7 @@ main {
     }
     .content-section h2 { font-size: 2rem; }
     .gear-grid { grid-template-columns: 1fr; }
+    
+    /* Slightly smaller icon on mobile */
+    .nav-icon { width: 18px; height: 18px; }
 }

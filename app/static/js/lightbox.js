@@ -1,6 +1,7 @@
 // --- DOM Element References ---
 const lightbox = document.getElementById('lightbox');
 const lightboxImg = document.getElementById('lightbox-img');
+const lightboxSpinner = document.getElementById('lightbox-spinner');
 const closeBtn = document.querySelector('.lightbox-close');
 const zoomInBtn = document.getElementById('zoom-in-btn');
 const zoomOutBtn = document.getElementById('zoom-out-btn');
@@ -163,6 +164,13 @@ function closeLightbox() {
     lightbox.classList.remove('active');
     document.body.style.overflow = 'auto';
 
+    // Clear Image data to free memory
+    lightboxImg.src = "";
+    lightboxImg.classList.remove('loaded');
+    
+    // Stop spinner
+    if (lightboxSpinner) lightboxSpinner.classList.remove('active');
+
     // Cleanup gesture event listeners to prevent memory leaks.
     lightbox.removeEventListener('wheel', onWheel);
     lightbox.removeEventListener('pointerdown', onPointerDown);
@@ -182,21 +190,36 @@ function closeLightbox() {
  * @param {string|null} key - The S3 key/ID of the image for sharing (optional).
  */
 export function openLightbox(url, key = null) {
+    // Reset state for the new image.
+    gestureState.scale = 1;
+    gestureState.translate = { x: 0, y: 0 };
+    lightboxImg.classList.remove('zoomed', 'panning', 'loaded'); // Ensure 'loaded' is removed so opacity resets
+    
+    // Show spinner immediately
+    if (lightboxSpinner) lightboxSpinner.classList.add('active');
+
+    // Load logic
+    lightboxImg.onload = () => {
+        if (lightboxSpinner) lightboxSpinner.classList.remove('active');
+        lightboxImg.classList.add('loaded'); // Fade in
+    };
+
+    lightboxImg.onerror = () => {
+         if (lightboxSpinner) lightboxSpinner.classList.remove('active');
+         // Optionally handle error state
+    };
+
     lightboxImg.src = url;
     lightboxImg.draggable = false;
     lightbox.classList.add('active');
     document.body.style.overflow = 'hidden';
 
+    requestUpdate(); // Apply the reset state visually.
+
     // Update URL for deep linking if key is provided
     if (key) {
         updateUrlState(key);
     }
-
-    // Reset state for the new image.
-    gestureState.scale = 1;
-    gestureState.translate = { x: 0, y: 0 };
-    lightboxImg.classList.remove('zoomed', 'panning');
-    requestUpdate(); // Apply the reset state visually.
 
     // Add event listeners for all interactions.
     lightbox.addEventListener('wheel', onWheel, { passive: false });

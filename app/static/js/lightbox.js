@@ -1,3 +1,5 @@
+import { fetchSinglePhoto } from './api.js';
+
 // --- DOM Element References ---
 const lightbox = document.getElementById('lightbox');
 const lightboxImg = document.getElementById('lightbox-img');
@@ -19,14 +21,10 @@ const gestureState = {
     initialPinchDist: 0,
 };
 
-// A flag to ensure we only schedule one frame update at a time.
 let isUpdateQueued = false;
+let currentKey = null;
 
 // --- URL State Management ---
-/**
- * Updates the browser URL to reflect the currently viewed photo.
- * @param {string} key - The ID/Key of the photo.
- */
 function updateUrlState(key) {
     if (key) {
         const newUrl = `${window.location.pathname}?id=${key}`;
@@ -34,31 +32,17 @@ function updateUrlState(key) {
     }
 }
 
-/**
- * Reverts the browser URL to the base state (clearing the query param).
- */
 function clearUrlState() {
     const baseUrl = window.location.pathname;
     window.history.pushState({}, '', baseUrl);
 }
 
 // --- Animation Loop ---
-/**
- * Applies the current gesture state (translation and scale) to the image.
- * This function is called by requestAnimationFrame, ensuring it runs efficiently
- * just before the browser repaints the screen.
- */
 function applyUpdate() {
-    // Apply the transform to the DOM element.
     lightboxImg.style.transform = `translate(${gestureState.translate.x}px, ${gestureState.translate.y}px) scale(${gestureState.scale})`;
-    // Reset the flag so a new update can be queued.
     isUpdateQueued = false;
 }
 
-/**
- * Schedules an update to the image's transform. If an update is already
- * scheduled for the next frame, it does nothing, preventing redundant work.
- */
 function requestUpdate() {
     if (!isUpdateQueued) {
         isUpdateQueued = true;
@@ -69,9 +53,6 @@ function requestUpdate() {
 // --- Utility Functions for Gestures ---
 const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
 
-/**
- * Ensures the image does not pan beyond its boundaries when zoomed in.
- */
 function clampTranslate() {
     const imgRect = lightboxImg.getBoundingClientRect();
     const containerRect = lightbox.getBoundingClientRect();
@@ -82,21 +63,14 @@ function clampTranslate() {
     gestureState.translate.y = clamp(gestureState.translate.y, -extraHeight, extraHeight);
 }
 
-/**
- * Sets the scale of the image, zooming towards a specific point on the screen.
- * @param {number} newScale - The target scale factor.
- * @param {object} center - The {x, y} coordinates to zoom towards.
- */
 function setScale(newScale, center = { x: window.innerWidth / 2, y: window.innerHeight / 2 }) {
     const oldScale = gestureState.scale;
     gestureState.scale = clamp(newScale, gestureState.minScale, gestureState.maxScale);
 
     if (gestureState.scale === gestureState.minScale) {
-        // Reset translation when fully zoomed out.
         gestureState.translate = { x: 0, y: 0 };
         lightboxImg.classList.remove('zoomed');
     } else {
-        // Adjust translation to keep the 'center' point stationary during zoom.
         const rect = lightboxImg.getBoundingClientRect();
         const mouseX = center.x - rect.left;
         const mouseY = center.y - rect.top;
@@ -106,7 +80,7 @@ function setScale(newScale, center = { x: window.innerWidth / 2, y: window.inner
     }
 
     clampTranslate();
-    requestUpdate(); // Schedule a visual update.
+    requestUpdate();
 }
 
 // --- Event Handlers for Gestures ---
@@ -126,7 +100,7 @@ const onPointerMove = (e) => {
         gestureState.translate.x = e.clientX - gestureState.start.x;
         gestureState.translate.y = e.clientY - gestureState.start.y;
         clampTranslate();
-        requestUpdate(); // Schedule a visual update.
+        requestUpdate();
     }
 };
 
@@ -165,15 +139,15 @@ function closeLightbox() {
     lightbox.classList.remove('active');
     document.body.style.overflow = 'auto';
 
-    // Clear Image data to free memory
+    // Cleanup
     lightboxImg.src = "";
     lightboxImg.classList.remove('loaded');
+    delete lightboxImg.dataset.retried;
     
-    // Reset spinner and error
     if (lightboxSpinner) lightboxSpinner.classList.remove('active');
     if (lightboxError) lightboxError.classList.remove('active');
 
-    // Cleanup gesture event listeners to prevent memory leaks.
+    // Remove listeners
     lightbox.removeEventListener('wheel', onWheel);
     lightbox.removeEventListener('pointerdown', onPointerDown);
     lightbox.removeEventListener('pointermove', onPointerMove);
@@ -182,59 +156,86 @@ function closeLightbox() {
     lightbox.removeEventListener('touchstart', onTouchStart);
     lightbox.removeEventListener('touchmove', onTouchMove);
 
-    // Reset URL
     clearUrlState();
 }
 
 /**
  * Opens the lightbox.
  * @param {string} url - The URL of the full-resolution image.
- * @param {string|null} key - The S3 key/ID of the image for sharing (optional).
+ * @param {string|null} key - The S3 key/ID of the image for sharing.
  */
 export function openLightbox(url, key = null) {
-    // Reset state for the new image.
+    // Reset state
     gestureState.scale = 1;
     gestureState.translate = { x: 0, y: 0 };
-    lightboxImg.classList.remove('zoomed', 'panning', 'loaded'); 
+    lightboxImg.classList.remove('zoomed', 'panning', 'loaded');
+    delete lightboxImg.dataset.retried;
+    currentKey = key;
     
     // UI Reset
     if (lightboxError) lightboxError.classList.remove('active');
     if (lightboxSpinner) lightboxSpinner.classList.add('active');
 
-    // --- Image Loading Logic ---
-    const handleLoad = () => {
+    // Setup Load Handler
+    lightboxImg.onload = () => {
         if (lightboxSpinner) lightboxSpinner.classList.remove('active');
-        lightboxImg.classList.add('loaded'); // Trigger CSS fade-in
+        if (lightboxError) lightboxError.classList.remove('active');
+        lightboxImg.classList.add('loaded');
     };
 
-    const handleError = () => {
+    // Setup Error/Retry Handler
+    lightboxImg.onerror = () => {
         if (lightboxSpinner) lightboxSpinner.classList.remove('active');
-        if (lightboxError) lightboxError.classList.add('active');
+        
+        // Retry Logic: If we have a key and haven't retried yet
+        if (currentKey && lightboxImg.dataset.retried !== 'true') {
+            console.log(`Image load failed. Retrying fetch for ${currentKey}...`);
+            lightboxImg.dataset.retried = 'true';
+            
+            // Show spinner again
+            if (lightboxSpinner) lightboxSpinner.classList.add('active');
+            if (lightboxError) lightboxError.classList.remove('active');
+            
+            fetchSinglePhoto(currentKey)
+                .then(data => {
+                    if (data && data.full_url) {
+                        // Append timestamp to bypass browser cache
+                        const sep = data.full_url.includes('?') ? '&' : '?';
+                        lightboxImg.src = `${data.full_url}${sep}retry=${Date.now()}`;
+                    } else {
+                        // Retry failed (no data)
+                        if (lightboxSpinner) lightboxSpinner.classList.remove('active');
+                        if (lightboxError) lightboxError.classList.add('active');
+                    }
+                })
+                .catch(err => {
+                    // Retry failed (network error)
+                    console.error("Retry failed:", err);
+                    if (lightboxSpinner) lightboxSpinner.classList.remove('active');
+                    if (lightboxError) lightboxError.classList.add('active');
+                });
+        } else {
+            // No key or already retried -> Permanent Failure
+            if (lightboxError) lightboxError.classList.add('active');
+        }
     };
-
-    lightboxImg.onload = handleLoad;
-    lightboxImg.onerror = handleError;
     
-    // Set source
     lightboxImg.src = url;
     
-    // Check if cached immediately
+    // Check if cached
     if (lightboxImg.complete && lightboxImg.naturalWidth > 0) {
-        handleLoad();
+        lightboxImg.onload();
     }
 
     lightboxImg.draggable = false;
     lightbox.classList.add('active');
     document.body.style.overflow = 'hidden';
 
-    requestUpdate(); // Apply the reset state visually.
+    requestUpdate();
 
-    // Update URL for deep linking if key is provided
-    if (key) {
-        updateUrlState(key);
-    }
+    if (key) updateUrlState(key);
 
-    // Add event listeners for all interactions.
+    // Attach Listeners
     lightbox.addEventListener('wheel', onWheel, { passive: false });
     lightbox.addEventListener('pointerdown', onPointerDown);
     lightbox.addEventListener('pointermove', onPointerMove);
@@ -244,9 +245,6 @@ export function openLightbox(url, key = null) {
     lightbox.addEventListener('touchmove', onTouchMove, { passive: false });
 }
 
-/**
- * Initializes the main event listeners for the lightbox.
- */
 export function initLightbox() {
     closeBtn.addEventListener('click', closeLightbox);
     document.addEventListener('keydown', (e) => {
@@ -261,7 +259,6 @@ export function initLightbox() {
         }
     });
     
-    // Listen for browser back button to close lightbox
     window.addEventListener('popstate', (e) => {
         if (lightbox.classList.contains('active')) {
              lightbox.classList.remove('active');
@@ -269,7 +266,6 @@ export function initLightbox() {
         }
     });
 
-    // Zoom control buttons with a larger increment for a snappier feel.
     zoomInBtn.addEventListener('click', () => setScale(gestureState.scale + 0.6));
     zoomOutBtn.addEventListener('click', () => setScale(gestureState.scale - 0.6));
     zoomResetBtn.addEventListener('click', () => setScale(1));

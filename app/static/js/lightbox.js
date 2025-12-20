@@ -199,8 +199,6 @@ export function openLightbox(url, key = null) {
             fetchSinglePhoto(currentKey)
                 .then(data => {
                     if (data && data.full_url) {
-                        // FIX: Do NOT append timestamp to Signed URLs, it breaks the signature.
-                        // The fresh URL from backend is already unique due to time-based signature.
                         lightboxImg.src = data.full_url;
                     } else {
                         // Retry failed (no data)
@@ -220,6 +218,8 @@ export function openLightbox(url, key = null) {
         }
     };
     
+    // Performance improvement for mobile decoding
+    lightboxImg.decoding = 'async';
     lightboxImg.src = url;
     
     // Check if cached

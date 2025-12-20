@@ -48,9 +48,11 @@ const lazyLoadObserver = new IntersectionObserver((entries, observer) => {
                 img.onload = null;
                 img.classList.add('loaded'); // Trigger fade-in
 
-                // Load Full Res ONLY if NOT mobile (PC behavior).
-                // On mobile, we stick to the thumbnail to save bandwidth and memory.
-                // The full image is loaded on-demand when the lightbox is opened.
+                // Optimization: On mobile, we DO NOT pre-load the full resolution image
+                // into the grid/carousel. We stay with the thumbnail (400px width) which
+                // is sufficient for mobile screens. The full res is only loaded when
+                // the user explicitly opens the lightbox.
+                // This saves massive bandwidth and memory, preventing lightbox load failures.
                 if (fullSrc && !isMobile()) {
                     const fullImage = new Image();
                     fullImage.onload = () => {
@@ -64,7 +66,8 @@ const lazyLoadObserver = new IntersectionObserver((entries, observer) => {
                     };
                     fullImage.src = fullSrc;
                 } else {
-                    // Mobile or no full source: stop here (keep thumbnail)
+                    // Mobile or no full source: stop here (keep thumbnail).
+                    // We must remove 'loading' class so the click handler works.
                     container.classList.remove('loading');
                 }
             };
@@ -86,7 +89,7 @@ const lazyLoadObserver = new IntersectionObserver((entries, observer) => {
 
 /**
  * Renders the hero carousel.
- * LOGIC UPDATE: Selects the top 20 newest photos.
+ * Selects the top 20 newest photos.
  */
 function renderCarousel(featuredPhotos) {
     if (!carouselTrack || !featuredPhotos || featuredPhotos.length === 0) {
@@ -123,7 +126,6 @@ function renderCarousel(featuredPhotos) {
         lazyLoadObserver.observe(slide);
 
         // Click to open lightbox (only if not dragging)
-        // Passes the key to enable URL sharing
         img.addEventListener('click', (e) => {
             if (!slide.classList.contains('loading') && !isDragging) {
                 openLightbox(photo.full_url, photo.key);
@@ -164,7 +166,6 @@ function getColumnCount() {
 
 /**
  * Renders the masonry gallery.
- * LOGIC UPDATE: Uses JS-based column distribution to ensure row-based reading order.
  * Items are distributed round-robin: 0->Col1, 1->Col2, 2->Col3, 3->Col1...
  */
 function renderGallery(galleryPhotos) {
@@ -205,9 +206,7 @@ function renderGallery(galleryPhotos) {
         img.dataset.fullSrc = photo.full_url;
         img.alt = 'Portfolio Image';
 
-        // ASPECT RATIO FIX: Set aspect ratio if dimensions are available from API.
-        // This reserves vertical space immediately, preventing layout shift and
-        // ensuring scroll-to-anchor works correctly on load.
+        // Reserve vertical space to prevent layout shift
         if (photo.width && photo.height) {
             img.style.aspectRatio = `${photo.width} / ${photo.height}`;
         }
@@ -341,8 +340,7 @@ function touchEnd() {
  * Initializes all UI components.
  */
 export function initUI(allPhotos) {
-    // LOGIC CHANGE: No more shuffle. Pick top 20 newest.
-    // Ensure allPhotos are sorted (API should have done this, but we slice the top).
+    // Pick top 20 newest for carousel
     const featuredPhotos = allPhotos.slice(0, 20);
 
     // Render components

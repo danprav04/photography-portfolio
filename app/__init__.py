@@ -175,7 +175,8 @@ def create_app():
             'stock_heading': app.config['STOCK_HEADING'],
             'stock_shutterstock': app.config['STOCK_URL_SHUTTERSTOCK'],
             'stock_alamy': app.config['STOCK_URL_ALAMY'],
-            'stock_dreamstime': app.config['STOCK_URL_DREAMSTIME']
+            'stock_dreamstime': app.config['STOCK_URL_DREAMSTIME'],
+            'stock_adobe': app.config['STOCK_URL_ADOBE']
         }
         return render_template('index.html', content=content)
 

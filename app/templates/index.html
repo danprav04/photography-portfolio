@@ -32,7 +32,7 @@
                 <a href="#gallery" class="nav-link">Portfolio</a>
                 <a href="#about" class="nav-link">About</a>
                 <a href="#gear" class="nav-link">Gear</a>
-                {% if content.stock_shutterstock or content.stock_alamy or content.stock_dreamstime %}
+                {% if content.stock_shutterstock or content.stock_alamy or content.stock_dreamstime or content.stock_adobe %}
                 <a href="#stock" class="nav-link">Stock</a>
                 {% endif %}
                 <a href="#contact" class="nav-link">Contact</a>
@@ -99,7 +99,7 @@
             </div>
         </section>
 
-        {% if content.stock_shutterstock or content.stock_alamy or content.stock_dreamstime %}
+        {% if content.stock_shutterstock or content.stock_alamy or content.stock_dreamstime or content.stock_adobe %}
         <div class="content-divider"></div>
 
         <section id="stock" class="content-section">
@@ -125,6 +125,13 @@
                 {% if content.stock_dreamstime %}
                 <a href="{{ content.stock_dreamstime }}" target="_blank" rel="noopener noreferrer" class="stock-card">
                     <span class="stock-name">Dreamstime</span>
+                    <span class="stock-link-text">Visit Portfolio &rarr;</span>
+                </a>
+                {% endif %}
+
+                {% if content.stock_adobe %}
+                <a href="{{ content.stock_adobe }}" target="_blank" rel="noopener noreferrer" class="stock-card">
+                    <span class="stock-name">Adobe Stock</span>
                     <span class="stock-link-text">Visit Portfolio &rarr;</span>
                 </a>
                 {% endif %}

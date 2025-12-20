@@ -22,6 +22,13 @@ let prevTranslate = 0;
 let currentGalleryPhotos = [];
 let currentColumnCount = 0;
 
+// --- Utilities ---
+/**
+ * Detects if the device is mobile based on screen width.
+ * Matches the CSS breakpoint (max-width: 768px).
+ */
+const isMobile = () => window.innerWidth <= 768;
+
 // --- Intersection Observer for Lazy Loading & Animations ---
 const lazyLoadObserver = new IntersectionObserver((entries, observer) => {
     entries.forEach(entry => {
@@ -41,25 +48,31 @@ const lazyLoadObserver = new IntersectionObserver((entries, observer) => {
                 img.onload = null;
                 img.classList.add('loaded'); // Trigger fade-in
 
-                // Load Full Res
-                if (fullSrc) {
+                // Load Full Res ONLY if NOT mobile (PC behavior).
+                // On mobile, we stick to the thumbnail to save bandwidth and memory.
+                // The full image is loaded on-demand when the lightbox is opened.
+                if (fullSrc && !isMobile()) {
                     const fullImage = new Image();
                     fullImage.onload = () => {
                         img.src = fullSrc;
                         container.classList.remove('loading');
                     };
                     fullImage.onerror = () => {
+                        // If full load fails, keep thumbnail but remove spinner
                         container.classList.remove('loading');
                         container.classList.add('load-error');
                     };
                     fullImage.src = fullSrc;
                 } else {
+                    // Mobile or no full source: stop here (keep thumbnail)
                     container.classList.remove('loading');
                 }
             };
 
             img.onload = handleThumbnailLoad;
             img.src = thumbnailSrc;
+            
+            // Handle cached images
             if (img.complete) handleThumbnailLoad();
 
             // Add visible class for stagger animation

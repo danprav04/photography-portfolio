@@ -27,29 +27,13 @@ API_CACHE_DIR = os.path.join(CACHE_BASE_DIR, 'api')
 API_CACHE_FILE = os.path.join(API_CACHE_DIR, 'gallery_cache_v2.json')
 
 # Cache expires every 24 hours because EXIF extraction is network/CPU intensive.
-# Manually delete cache/api/gallery_cache.json to force a refresh sooner.
+# Note: This controls the SERVER SIDE metadata cache (dimensions/dates).
+# It does NOT control the browser cache for signed URLs.
 CACHE_EXPIRATION_SECONDS = 86400 
 
 THUMBNAIL_MAX_WIDTH = 400
 EXIF_DATETIME_ORIGINAL = 36867
 EXIF_ORIENTATION = 274
-
-def _calculate_gallery_etag(objects):
-    """
-    Calculates a collective ETag for a list of S3 objects.
-    Uses the sorted date and key to ensure consistency.
-    """
-    if not objects:
-        return None
-    
-    # Use the calculated sort_date in the hash to detect order changes
-    data_string = "".join([f"{obj['Key']}-{obj.get('sort_date', '')}" for obj in objects])
-    
-    # Add a time-based salt (changes every 30 mins) to refresh presigned URLs
-    time_salt = str(int(time.time() // 1800))
-    
-    combined_hash_input = f"{data_string}-{time_salt}"
-    return f'"{hashlib.sha256(combined_hash_input.encode("utf-8")).hexdigest()}"'
 
 def _get_date_from_filename(object_key):
     """
@@ -228,8 +212,9 @@ def create_app():
                 'thumbnail_url': url_for('get_thumbnail', object_key=object_key, _external=False)
             })
             
-            # Prevent browser caching of this specific response to ensure retries get fresh signatures
-            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            # Prevent browser caching of this specific response completely
+            # This ensures that if the user clicks the link, it is fresh.
+            response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
             response.headers['Pragma'] = 'no-cache'
             response.headers['Expires'] = '0'
             
@@ -246,6 +231,9 @@ def create_app():
     def get_photos():
         """API endpoint to retrieve sorted photo data."""
         try:
+            # 1. Handle SERVER-SIDE Metadata Caching
+            # We cache the list of objects and their dimensions/dates to avoid hitting S3 'ListObjects'
+            # and downloading headers for EXIF data on every request.
             cache_is_valid = False
             if os.path.exists(API_CACHE_FILE):
                 modification_time = os.path.getmtime(API_CACHE_FILE)
@@ -256,9 +244,8 @@ def create_app():
                 with open(API_CACHE_FILE, 'r') as f:
                     cached_data = json.load(f)
                 sorted_objects = cached_data['objects']
-                current_etag = _calculate_gallery_etag(sorted_objects)
             else:
-                print("Cache expired or missing. building photo list...")
+                print("Cache expired or missing. Building photo list...")
                 bucket_name = app.config['OCI_BUCKET_NAME']
                 paginator = s3_client.get_paginator('list_objects_v2')
                 pages = paginator.paginate(Bucket=bucket_name)
@@ -269,6 +256,7 @@ def create_app():
                         raw_objects.extend(page['Contents'])
                 
                 processed_objects = []
+                # Use threads to fetch metadata for new files faster
                 with ThreadPoolExecutor(max_workers=20) as executor:
                     future_to_obj = {
                         executor.submit(process_single_object, obj, bucket_name): obj 
@@ -286,6 +274,7 @@ def create_app():
                     reverse=True
                 )
 
+                # Save metadata to cache (Does NOT include signed URLs)
                 temp_file_path = API_CACHE_FILE + f".tmp-{os.getpid()}"
                 with open(temp_file_path, 'w') as f:
                     json.dump({'objects': sorted_objects}, f)
@@ -293,22 +282,12 @@ def create_app():
                 if os.path.exists(API_CACHE_FILE):
                     os.remove(API_CACHE_FILE)
                 os.rename(temp_file_path, API_CACHE_FILE)
-                
-                current_etag = _calculate_gallery_etag(sorted_objects)
 
-            if not current_etag:
-                return jsonify([])
-
-            if_none_match = request.headers.get('If-None-Match')
-            if if_none_match and if_none_match == current_etag:
-                return make_response(), 304
-
-            if request.method == 'HEAD':
-                response = make_response()
-                response.headers['ETag'] = current_etag
-                response.headers['Cache-Control'] = f'public, max-age={CACHE_EXPIRATION_SECONDS}'
-                return response
-
+            # 2. Generate Fresh Response for Client
+            # We explicitly do NOT return a 304 Not Modified here.
+            # Even if the list of photos is the same, the Presigned URLs inside
+            # the JSON are time-sensitive and must be regenerated for every request.
+            
             photo_data = []
             for obj in sorted_objects:
                 key = obj['Key']
@@ -317,6 +296,7 @@ def create_app():
                 
                 photo_data.append({
                     'key': key,
+                    # Generate a fresh URL valid for 1 hour
                     'full_url': s3_client.generate_presigned_url(
                         'get_object', 
                         Params=params, 
@@ -328,8 +308,16 @@ def create_app():
                 })
             
             response = make_response(jsonify(photo_data))
-            response.headers['ETag'] = current_etag
-            response.headers['Cache-Control'] = f'public, max-age={CACHE_EXPIRATION_SECONDS}'
+            
+            # 3. Disable Browser Caching
+            # Crucial: Tell the browser/proxies never to store this JSON response.
+            # This ensures that if the user reloads the page 2 hours later,
+            # they get a new JSON payload with new valid URLs, rather than a cached
+            # payload with expired URLs.
+            response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+            
             return response
             
         except Exception as e:

@@ -1,14 +1,23 @@
 /**
  * Loads photo data from the API.
- * This function relies on the browser's standard HTTP caching (via ETags sent
- * by the server), but does not implement any additional client-side application
- * caching in localStorage.
+ * This function specifically disables caching to ensure that the S3 Presigned URLs
+ * returned by the server are always fresh and valid.
+ * 
  * @returns {Promise<Array|null>} A promise that resolves to the photo data or null on error.
  */
 export async function loadPhotoData() {
     console.log("Fetching photo data from server.");
     try {
-        const response = await fetch('/api/photos');
+        // Add a timestamp to the URL to bust any aggressive ISP/proxy caching
+        const timestamp = new Date().getTime();
+        const response = await fetch(`/api/photos?_t=${timestamp}`, {
+            method: 'GET',
+            cache: 'no-store', // Tell browser not to look in cache
+            headers: {
+                'Pragma': 'no-cache',
+                'Cache-Control': 'no-cache'
+            }
+        });
 
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
@@ -43,15 +52,24 @@ export async function fetchSinglePhoto(key, bypassCache = false) {
     const encodedKey = encodeURIComponent(key);
     let url = `/api/photo/${encodedKey}`;
     
+    // Always append timestamp or use fetch options to ensure freshness 
+    // for single photo retrieval as well.
+    const timestamp = Date.now();
+    url += `?_t=${timestamp}`;
+
     if (bypassCache) {
         console.log(`Bypassing cache for photo: ${key}`);
-        // Add a timestamp query param to force the browser to make a network request
-        url += `?_t=${Date.now()}`;
     } else {
         console.log(`Fetching single photo: ${key}`);
     }
     
-    const response = await fetch(url);
+    const response = await fetch(url, {
+        cache: 'no-store',
+        headers: {
+            'Pragma': 'no-cache',
+            'Cache-Control': 'no-cache'
+        }
+    });
     
     if (!response.ok) {
         // Throw error to be caught by the UI layer

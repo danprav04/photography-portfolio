@@ -4,13 +4,10 @@ import { initLightbox, openLightbox } from './lightbox.js';
 import { initGear } from './gear.js';
 
 /**
- * Handles the initial scroll to a hash anchor (e.g. #gear) if present.
- * This is necessary because dynamic content (like the carousel) is inserted
- * after the page load, pushing sections down.
+ * Handles the initial scroll to a hash anchor.
  */
 function handleInitialScroll() {
     const hash = window.location.hash;
-    
     if (hash && hash.length > 1) {
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
@@ -33,7 +30,7 @@ function handleInitialScroll() {
 function initMobileMenu() {
     const toggleBtn = document.querySelector('.mobile-menu-toggle');
     const nav = document.getElementById('main-nav');
-    const navLinks = document.querySelectorAll('.nav-link'); // Select text links
+    const navLinks = document.querySelectorAll('.nav-link');
 
     if (!toggleBtn || !nav) return;
 
@@ -43,10 +40,9 @@ function initMobileMenu() {
         toggleBtn.setAttribute('aria-expanded', !expanded);
         toggleBtn.classList.toggle('active');
         nav.classList.toggle('active');
-        document.body.style.overflow = !expanded ? 'hidden' : 'auto'; // Prevent scrolling when menu is open
+        document.body.style.overflow = !expanded ? 'hidden' : 'auto';
     });
 
-    // Close menu when clicking a link
     navLinks.forEach(link => {
         link.addEventListener('click', () => {
             toggleBtn.setAttribute('aria-expanded', 'false');
@@ -56,7 +52,6 @@ function initMobileMenu() {
         });
     });
 
-    // Close menu when clicking outside
     document.addEventListener('click', (e) => {
         if (nav.classList.contains('active') && !nav.contains(e.target) && !toggleBtn.contains(e.target)) {
             toggleBtn.setAttribute('aria-expanded', 'false');
@@ -71,7 +66,6 @@ function initMobileMenu() {
  * Initializes security features to prevent easy image downloads.
  */
 function initImageProtection() {
-    // Prevent context menu on all images and the lightbox
     document.addEventListener('contextmenu', (e) => {
         if (e.target.tagName === 'IMG' || e.target.classList.contains('lightbox-content')) {
             e.preventDefault();
@@ -79,7 +73,6 @@ function initImageProtection() {
         }
     }, false);
 
-    // Prevent dragging images
     document.addEventListener('dragstart', (e) => {
         if (e.target.tagName === 'IMG') {
             e.preventDefault();
@@ -91,19 +84,17 @@ function initImageProtection() {
  * Initializes the application.
  */
 async function init() {
-    // 1. Initialize global UI components
     initImageProtection();
     initLightbox();
     initMobileMenu();
 
-    // 2. Initialize Gear Section (if present)
     const gearContainer = document.getElementById('gear-container');
     if (gearContainer) {
         const amazonTag = gearContainer.dataset.amazonTag;
         initGear('gear-container', amazonTag);
     }
 
-    // 3. Deep Linking Check
+    // Deep Linking Check
     const urlParams = new URLSearchParams(window.location.search);
     const sharedPhotoKey = urlParams.get('id');
 
@@ -112,17 +103,16 @@ async function init() {
         try {
             const singlePhoto = await fetchSinglePhoto(sharedPhotoKey);
             if (singlePhoto) {
-                openLightbox(singlePhoto.full_url, sharedPhotoKey);
+                // Pass thumbnail URL for fallback
+                openLightbox(singlePhoto.full_url, sharedPhotoKey, singlePhoto.thumbnail_url);
             }
         } catch (e) {
             console.error("Failed to load shared photo", e);
         }
     }
 
-    // 4. Load all photo data
     const allPhotos = await loadPhotoData();
 
-    // 5. Render the UI
     if (allPhotos) {
         initUI(allPhotos);
         handleInitialScroll();

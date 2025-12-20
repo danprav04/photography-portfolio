@@ -4,6 +4,7 @@ import hashlib
 import time
 import json
 import io
+import mimetypes
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, render_template, jsonify, request, make_response, send_from_directory, url_for
@@ -12,6 +13,9 @@ from botocore.client import Config as BotocoreConfig
 from botocore.exceptions import ClientError
 from app.config import Config
 from PIL import Image, ExifTags
+
+# Initialize mimetypes to ensure we can guess correctly
+mimetypes.init()
 
 s3_client = None
 
@@ -138,6 +142,29 @@ def process_single_object(obj, bucket_name):
         'height': meta['height']
     }
 
+def get_presigned_url_params(bucket, key):
+    """
+    Helper to generate the correct parameters for a presigned URL.
+    Forces correct Content-Type and Content-Disposition headers.
+    """
+    # Guess mime type based on file extension
+    mime_type, _ = mimetypes.guess_type(key)
+    if not mime_type:
+        # Fallback defaults
+        if key.lower().endswith(('.jpg', '.jpeg')):
+            mime_type = 'image/jpeg'
+        elif key.lower().endswith('.png'):
+            mime_type = 'image/png'
+        else:
+            mime_type = 'application/octet-stream'
+            
+    return {
+        'Bucket': bucket,
+        'Key': key,
+        'ResponseContentType': mime_type,
+        'ResponseContentDisposition': 'inline'
+    }
+
 def create_app():
     """Application factory function."""
     app = Flask(__name__)
@@ -171,7 +198,6 @@ def create_app():
             'footer_text': app.config['PORTFOLIO_FOOTER_TEXT'],
             'amazon_tag': app.config['AMAZON_TAG'],
             'disclaimer_text': app.config['PORTFOLIO_DISCLAIMER_TEXT'],
-            # Stock Portfolio Links
             'stock_heading': app.config['STOCK_HEADING'],
             'stock_shutterstock': app.config['STOCK_URL_SHUTTERSTOCK'],
             'stock_alamy': app.config['STOCK_URL_ALAMY'],
@@ -187,10 +213,12 @@ def create_app():
             # Check existence first
             s3_client.head_object(Bucket=app.config['OCI_BUCKET_NAME'], Key=object_key)
             
-            # Generate new signed URL
+            # Generate new signed URL with explicit content type
+            params = get_presigned_url_params(app.config['OCI_BUCKET_NAME'], object_key)
+            
             full_url = s3_client.generate_presigned_url(
                 'get_object',
-                Params={'Bucket': app.config['OCI_BUCKET_NAME'], 'Key': object_key},
+                Params=params,
                 ExpiresIn=3600
             )
             
@@ -200,10 +228,7 @@ def create_app():
                 'thumbnail_url': url_for('get_thumbnail', object_key=object_key, _external=False)
             })
             
-            # Prevent browser caching of this specific response.
-            # This is crucial for the retry logic: if the image fails loading, 
-            # we need the browser to hit this endpoint again to get a NEW signature,
-            # not return the old cached JSON with the expired signature.
+            # Prevent browser caching of this specific response to ensure retries get fresh signatures
             response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
             response.headers['Pragma'] = 'no-cache'
             response.headers['Expires'] = '0'
@@ -287,11 +312,14 @@ def create_app():
             photo_data = []
             for obj in sorted_objects:
                 key = obj['Key']
+                # Generate parameters for signed URL to force correct Content-Type
+                params = get_presigned_url_params(app.config['OCI_BUCKET_NAME'], key)
+                
                 photo_data.append({
                     'key': key,
                     'full_url': s3_client.generate_presigned_url(
                         'get_object', 
-                        Params={'Bucket': app.config['OCI_BUCKET_NAME'], 'Key': key}, 
+                        Params=params, 
                         ExpiresIn=3600
                     ),
                     'thumbnail_url': url_for('get_thumbnail', object_key=key, _external=False),

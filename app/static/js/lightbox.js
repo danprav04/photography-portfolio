@@ -14,7 +14,7 @@ const zoomResetBtn = document.getElementById('zoom-reset-btn');
 const gestureState = {
     scale: 1,
     minScale: 1,
-    maxScale: 8, // Increased max zoom
+    maxScale: 8,
     isPanning: false,
     start: { x: 0, y: 0 },
     translate: { x: 0, y: 0 },
@@ -23,6 +23,7 @@ const gestureState = {
 
 let isUpdateQueued = false;
 let currentKey = null;
+let currentThumbnailUrl = null;
 
 // --- URL State Management ---
 function updateUrlState(key) {
@@ -85,14 +86,9 @@ function setScale(newScale, center = { x: window.innerWidth / 2, y: window.inner
 
 // --- Event Handlers for Gestures ---
 const onPointerDown = (e) => {
-    // If the click is on controls or close button, do nothing (let default bubble)
     if (e.target.closest('.lightbox-controls') || e.target.closest('.lightbox-close')) return;
-    
     if (e.pointerType === 'mouse' && e.button !== 0) return;
-    
-    // Prevent default browser dragging
     e.preventDefault();
-    
     if (gestureState.scale > gestureState.minScale) {
         gestureState.isPanning = true;
         gestureState.start = { x: e.clientX - gestureState.translate.x, y: e.clientY - gestureState.translate.y };
@@ -140,6 +136,40 @@ const onTouchMove = (e) => {
     }
 };
 
+// --- Error & Fallback UI ---
+function setUIState(state, message = "") {
+    // States: 'loading', 'loaded', 'error', 'fallback'
+    
+    if (state === 'loading') {
+        if (lightboxSpinner) lightboxSpinner.classList.add('active');
+        if (lightboxError) lightboxError.classList.remove('active');
+        lightboxImg.classList.remove('loaded');
+    } 
+    else if (state === 'loaded') {
+        if (lightboxSpinner) lightboxSpinner.classList.remove('active');
+        if (lightboxError) lightboxError.classList.remove('active');
+        lightboxImg.classList.add('loaded');
+    }
+    else if (state === 'error') {
+        if (lightboxSpinner) lightboxSpinner.classList.remove('active');
+        if (lightboxError) {
+            lightboxError.textContent = message || "Image failed to load.";
+            lightboxError.style.color = "#ff6b6b";
+            lightboxError.classList.add('active');
+        }
+    }
+    else if (state === 'fallback') {
+        if (lightboxSpinner) lightboxSpinner.classList.remove('active');
+        // We reuse the error div but style it as a warning
+        if (lightboxError) {
+            lightboxError.textContent = "Preview Mode (Low Resolution)";
+            lightboxError.style.color = "var(--accent-color)";
+            lightboxError.classList.add('active');
+        }
+        lightboxImg.classList.add('loaded');
+    }
+}
+
 // --- Main Lightbox Functions ---
 function closeLightbox() {
     lightbox.classList.remove('active');
@@ -150,11 +180,7 @@ function closeLightbox() {
     lightboxImg.classList.remove('loaded');
     delete lightboxImg.dataset.retried;
     
-    if (lightboxSpinner) lightboxSpinner.classList.remove('active');
-    if (lightboxError) {
-        lightboxError.classList.remove('active');
-        lightboxError.textContent = "Image failed to load."; // Reset default text
-    }
+    setUIState('reset'); // Hides spinner/error
 
     // Remove listeners
     lightbox.removeEventListener('wheel', onWheel);
@@ -172,43 +198,38 @@ function closeLightbox() {
  * Opens the lightbox.
  * @param {string} url - The URL of the full-resolution image.
  * @param {string|null} key - The S3 key/ID of the image for sharing.
+ * @param {string|null} thumbnailUrl - Optional URL for the thumbnail fallback.
  */
-export function openLightbox(url, key = null) {
+export function openLightbox(url, key = null, thumbnailUrl = null) {
     // Reset state
     gestureState.scale = 1;
     gestureState.translate = { x: 0, y: 0 };
-    lightboxImg.classList.remove('zoomed', 'panning', 'loaded');
+    lightboxImg.classList.remove('zoomed', 'panning');
     delete lightboxImg.dataset.retried;
     currentKey = key;
-    
-    // UI Reset
-    if (lightboxError) {
-        lightboxError.classList.remove('active');
-        lightboxError.textContent = "Image failed to load."; // Reset
-    }
-    if (lightboxSpinner) lightboxSpinner.classList.add('active');
+    currentThumbnailUrl = thumbnailUrl;
+
+    setUIState('loading');
 
     // Setup Load Handler
     lightboxImg.onload = () => {
-        if (lightboxSpinner) lightboxSpinner.classList.remove('active');
-        if (lightboxError) lightboxError.classList.remove('active');
-        lightboxImg.classList.add('loaded');
+        // If we are showing the fallback thumbnail, set UI to fallback state
+        if (currentThumbnailUrl && lightboxImg.src.includes(currentThumbnailUrl)) {
+             setUIState('fallback');
+        } else {
+             setUIState('loaded');
+        }
     };
 
     // Setup Error/Retry Handler
     lightboxImg.onerror = () => {
-        if (lightboxSpinner) lightboxSpinner.classList.remove('active');
-        
-        // Retry Logic: If we have a key and haven't retried yet
+        // 1. First Retry: Bypass Cache (Timestamp)
         if (currentKey && lightboxImg.dataset.retried !== 'true') {
-            console.log(`Image load failed (likely expired). Clearing cache and retrying for ${currentKey}...`);
+            console.log(`Image load failed. Retrying with cache-busting for ${currentKey}...`);
             lightboxImg.dataset.retried = 'true';
             
-            // Show spinner again
-            if (lightboxSpinner) lightboxSpinner.classList.add('active');
-            if (lightboxError) lightboxError.classList.remove('active');
+            setUIState('loading');
             
-            // Pass 'true' to force a cache bypass
             fetchSinglePhoto(currentKey, true)
                 .then(data => {
                     if (data && data.full_url) {
@@ -218,26 +239,31 @@ export function openLightbox(url, key = null) {
                     }
                 })
                 .catch(err => {
-                    // Retry failed (network error or server 500/404)
                     console.error("Retry failed:", err);
-                    if (lightboxSpinner) lightboxSpinner.classList.remove('active');
-                    if (lightboxError) {
-                        // Display the actual error to help debugging
-                        lightboxError.textContent = `Error: ${err.message}`;
-                        lightboxError.classList.add('active');
-                    }
+                    triggerFallback();
                 });
         } else {
-            // No key or already retried -> Permanent Failure
-            if (lightboxError) lightboxError.classList.add('active');
+            // 2. Second Retry: Fallback to Thumbnail
+            triggerFallback();
         }
     };
+
+    function triggerFallback() {
+        if (currentThumbnailUrl) {
+            console.warn("Full image failed. Falling back to thumbnail.");
+            // Prevent infinite loop if thumbnail also fails
+            lightboxImg.onerror = () => {
+                setUIState('error', "Image failed to load.");
+            };
+            lightboxImg.src = currentThumbnailUrl;
+        } else {
+            setUIState('error', "Image failed to load.");
+        }
+    }
     
-    // Performance improvement for mobile decoding
     lightboxImg.decoding = 'async';
     lightboxImg.src = url;
     
-    // Check if cached
     if (lightboxImg.complete && lightboxImg.naturalWidth > 0) {
         lightboxImg.onload();
     }
@@ -259,7 +285,6 @@ export function openLightbox(url, key = null) {
     lightbox.addEventListener('touchstart', onTouchStart, { passive: false });
     lightbox.addEventListener('touchmove', onTouchMove, { passive: false });
     
-    // Specific security listener for lightbox image
     lightboxImg.addEventListener('contextmenu', (e) => {
         e.preventDefault();
         return false;
@@ -275,8 +300,6 @@ export function initLightbox() {
     });
 
     lightbox.addEventListener('click', (e) => {
-        // If clicking on the background (not image, not controls), close it.
-        // Also ensure we aren't clicking the image itself (which has pointer events).
         if (e.target === lightbox) {
             closeLightbox();
         }

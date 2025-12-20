@@ -23,10 +23,6 @@ let currentGalleryPhotos = [];
 let currentColumnCount = 0;
 
 // --- Utilities ---
-/**
- * Detects if the device is mobile based on screen width.
- * Matches the CSS breakpoint (max-width: 768px).
- */
 const isMobile = () => window.innerWidth <= 768;
 
 // --- Intersection Observer for Lazy Loading & Animations ---
@@ -46,13 +42,9 @@ const lazyLoadObserver = new IntersectionObserver((entries, observer) => {
             // Load logic
             const handleThumbnailLoad = () => {
                 img.onload = null;
-                img.classList.add('loaded'); // Trigger fade-in
+                img.classList.add('loaded');
 
-                // Optimization: On mobile, we DO NOT pre-load the full resolution image
-                // into the grid/carousel. We stay with the thumbnail (400px width) which
-                // is sufficient for mobile screens. The full res is only loaded when
-                // the user explicitly opens the lightbox.
-                // This saves massive bandwidth and memory, preventing lightbox load failures.
+                // Optimization: On mobile, only load full res on lightbox open
                 if (fullSrc && !isMobile()) {
                     const fullImage = new Image();
                     fullImage.onload = () => {
@@ -60,14 +52,11 @@ const lazyLoadObserver = new IntersectionObserver((entries, observer) => {
                         container.classList.remove('loading');
                     };
                     fullImage.onerror = () => {
-                        // If full load fails, keep thumbnail but remove spinner
                         container.classList.remove('loading');
                         container.classList.add('load-error');
                     };
                     fullImage.src = fullSrc;
                 } else {
-                    // Mobile or no full source: stop here (keep thumbnail).
-                    // We must remove 'loading' class so the click handler works.
                     container.classList.remove('loading');
                 }
             };
@@ -75,12 +64,9 @@ const lazyLoadObserver = new IntersectionObserver((entries, observer) => {
             img.onload = handleThumbnailLoad;
             img.src = thumbnailSrc;
             
-            // Handle cached images
             if (img.complete) handleThumbnailLoad();
 
-            // Add visible class for stagger animation
             container.classList.add('visible');
-
             observer.unobserve(container);
         }
     });
@@ -89,7 +75,6 @@ const lazyLoadObserver = new IntersectionObserver((entries, observer) => {
 
 /**
  * Renders the hero carousel.
- * Selects the top 20 newest photos.
  */
 function renderCarousel(featuredPhotos) {
     if (!carouselTrack || !featuredPhotos || featuredPhotos.length === 0) {
@@ -105,7 +90,6 @@ function renderCarousel(featuredPhotos) {
         const slide = document.createElement('div');
         slide.className = 'carousel-slide loading';
         
-        // Background image for the blur effect
         slide.style.backgroundImage = `url(${photo.thumbnail_url})`;
 
         const img = document.createElement('img');
@@ -122,22 +106,19 @@ function renderCarousel(featuredPhotos) {
 
         lazyLoadObserver.observe(slide);
 
-        // SECURITY: Click listener is attached to the slide container, NOT the image.
-        // The image has pointer-events: none via CSS, so clicks pass through to 'slide'.
         slide.addEventListener('click', (e) => {
-            // Ensure we aren't dragging and that the loader isn't covering interaction
             if (!slide.classList.contains('loading') && !isDragging) {
-                openLightbox(photo.full_url, photo.key);
+                // PASS THUMBNAIL URL FOR FALLBACK
+                openLightbox(photo.full_url, photo.key, photo.thumbnail_url);
             }
         });
 
-        // Indicators
         const dot = document.createElement('button');
         dot.className = 'carousel-indicator';
         dot.ariaLabel = `Go to slide ${index + 1}`;
         carouselNav.appendChild(dot);
         dot.addEventListener('click', (e) => {
-            e.stopPropagation(); // Prevent bubbling to slide click
+            e.stopPropagation();
             moveToSlide(index);
             pauseAutoPlay();
         });
@@ -153,10 +134,6 @@ function renderCarousel(featuredPhotos) {
     }
 }
 
-/**
- * Helper function to determine the number of columns based on viewport width.
- * Matches breakpoints: > 1200px (3 cols), 768px-1200px (2 cols), < 768px (1 col).
- */
 function getColumnCount() {
     const width = window.innerWidth;
     if (width <= 768) return 1;
@@ -166,10 +143,8 @@ function getColumnCount() {
 
 /**
  * Renders the masonry gallery.
- * Items are distributed round-robin: 0->Col1, 1->Col2, 2->Col3, 3->Col1...
  */
 function renderGallery(galleryPhotos) {
-    // Store data for potential re-renders on resize
     currentGalleryPhotos = galleryPhotos;
     const numCols = getColumnCount();
     currentColumnCount = numCols;
@@ -181,7 +156,6 @@ function renderGallery(galleryPhotos) {
         return;
     }
     
-    // Create column wrappers
     const columns = [];
     for (let i = 0; i < numCols; i++) {
         const col = document.createElement('div');
@@ -190,14 +164,12 @@ function renderGallery(galleryPhotos) {
         galleryContainer.appendChild(col);
     }
 
-    // Distribute photos into columns
     galleryPhotos.forEach((photo, index) => {
         const colIndex = index % numCols;
         const targetColumn = columns[colIndex];
 
         const galleryItem = document.createElement('div');
         galleryItem.className = 'gallery-item loading';
-        // Add a slight stagger to the animation delay based on index
         galleryItem.style.transitionDelay = `${(index % 5) * 50}ms`;
 
         const img = document.createElement('img');
@@ -206,7 +178,6 @@ function renderGallery(galleryPhotos) {
         img.dataset.fullSrc = photo.full_url;
         img.alt = 'Portfolio Image';
 
-        // Reserve vertical space to prevent layout shift
         if (photo.width && photo.height) {
             img.style.aspectRatio = `${photo.width} / ${photo.height}`;
         }
@@ -219,17 +190,16 @@ function renderGallery(galleryPhotos) {
         
         lazyLoadObserver.observe(galleryItem);
 
-        // SECURITY: Click listener is on the container (galleryItem).
-        // Image has pointer-events: none, so clicks pass through.
         galleryItem.addEventListener('click', () => {
             if (!galleryItem.classList.contains('loading')) {
-                openLightbox(photo.full_url, photo.key);
+                // PASS THUMBNAIL URL FOR FALLBACK
+                openLightbox(photo.full_url, photo.key, photo.thumbnail_url);
             }
         });
     });
 }
 
-// --- Resize Listener for Responsive Re-flow ---
+// --- Resize Listener ---
 let resizeTimeout;
 window.addEventListener('resize', () => {
     clearTimeout(resizeTimeout);
@@ -242,7 +212,6 @@ window.addEventListener('resize', () => {
 });
 
 // --- Carousel Logic & Swipe Support ---
-
 const moveToSlide = (targetIndex) => {
     if (!carouselTrack || slides.length === 0) return;
     
@@ -273,20 +242,15 @@ const startSlideInterval = () => {
 
 const pauseAutoPlay = () => {
     clearInterval(slideInterval);
-    // Restart after 10 seconds of inactivity
     slideInterval = setInterval(nextSlide, 10000);
 };
 
 // --- Touch / Swipe Implementation ---
 function initTouchGestures() {
     const track = carouselTrack;
-    
-    // Touch events
     track.addEventListener('touchstart', touchStart);
     track.addEventListener('touchend', touchEnd);
     track.addEventListener('touchmove', touchMove);
-    
-    // Mouse events (for desktop dragging)
     track.addEventListener('mousedown', touchStart);
     track.addEventListener('mouseup', touchEnd);
     track.addEventListener('mouseleave', () => {
@@ -300,14 +264,12 @@ function getPositionX(event) {
 }
 
 function touchStart(event) {
-    // Only drag if not touching a control button
     if (event.target.closest('.carousel-controls') || event.target.closest('.carousel-nav')) {
         return;
     }
-    
     isDragging = true;
     startPos = getPositionX(event);
-    carouselTrack.style.transition = 'none'; // Remove transition for instant drag following
+    carouselTrack.style.transition = 'none';
     pauseAutoPlay();
 }
 
@@ -315,10 +277,8 @@ function touchMove(event) {
     if (isDragging) {
         const currentPosition = getPositionX(event);
         const diff = currentPosition - startPos;
-        // Calculate percentage movement based on container width
         const containerWidth = carouselTrack.clientWidth;
         const movePercent = (diff / containerWidth) * 100;
-        
         carouselTrack.style.transform = `translateX(${prevTranslate + movePercent}%)`;
     }
 }
@@ -330,7 +290,6 @@ function touchEnd() {
     
     const movedBy = currentTranslate - parseFloat(carouselTrack.style.transform.replace('translateX(', '').replace('%)', ''));
     
-    // If moved by more than 15%, change slide
     if (movedBy < -15) {
         prevSlide();
     } else if (movedBy > 15) {
@@ -340,19 +299,11 @@ function touchEnd() {
     }
 }
 
-
-/**
- * Initializes all UI components.
- */
 export function initUI(allPhotos) {
-    // Pick top 20 newest for carousel
     const featuredPhotos = allPhotos.slice(0, 20);
-
-    // Render components
     renderCarousel(featuredPhotos);
     renderGallery(allPhotos);
 
-    // Carousel Button Listeners
     if (prevButton && nextButton) {
         prevButton.addEventListener('click', (e) => {
             e.stopPropagation();

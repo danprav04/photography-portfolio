@@ -7,7 +7,7 @@ const lightboxSpinner = document.getElementById('lightbox-spinner');
 // New Elements
 const lightboxStatus = document.getElementById('lightbox-status');
 const lightboxMessage = document.getElementById('lightbox-message');
-const lightboxActionBtn = document.getElementById('lightbox-action-btn');
+const lightboxReloadBtn = document.getElementById('lightbox-reload-btn');
 
 const closeBtn = document.querySelector('.lightbox-close');
 const zoomInBtn = document.getElementById('zoom-in-btn');
@@ -28,7 +28,7 @@ const gestureState = {
 let isUpdateQueued = false;
 let currentKey = null;
 let currentThumbnailUrl = null;
-let currentFullUrl = null;
+let originalFullUrl = null; // Store the initial URL passed to lightbox
 
 // --- URL State Management ---
 function updateUrlState(key) {
@@ -146,7 +146,7 @@ function setUIState(state, message = "") {
     // Hide everything first
     if (lightboxSpinner) lightboxSpinner.classList.remove('active');
     if (lightboxStatus) lightboxStatus.classList.remove('active');
-    if (lightboxActionBtn) lightboxActionBtn.classList.remove('active');
+    if (lightboxReloadBtn) lightboxReloadBtn.classList.remove('active');
     
     if (state === 'loading') {
         if (lightboxSpinner) lightboxSpinner.classList.add('active');
@@ -161,11 +161,7 @@ function setUIState(state, message = "") {
             lightboxMessage.textContent = message || "Image failed to load.";
             lightboxMessage.style.color = "#ff6b6b";
         }
-        if (currentFullUrl && lightboxActionBtn) {
-            lightboxActionBtn.href = currentFullUrl;
-            lightboxActionBtn.textContent = "Open Original Image";
-            lightboxActionBtn.classList.add('active');
-        }
+        if (lightboxReloadBtn) lightboxReloadBtn.classList.add('active');
     }
     else if (state === 'fallback') {
         if (lightboxStatus) lightboxStatus.classList.add('active');
@@ -173,11 +169,7 @@ function setUIState(state, message = "") {
             lightboxMessage.textContent = "Preview Mode (Low Resolution)";
             lightboxMessage.style.color = "var(--accent-color)";
         }
-        if (currentFullUrl && lightboxActionBtn) {
-            lightboxActionBtn.href = currentFullUrl;
-            lightboxActionBtn.textContent = "View Original";
-            lightboxActionBtn.classList.add('active');
-        }
+        if (lightboxReloadBtn) lightboxReloadBtn.classList.add('active');
         lightboxImg.classList.add('loaded');
     }
 }
@@ -190,7 +182,6 @@ function closeLightbox() {
     // Cleanup
     lightboxImg.src = "";
     lightboxImg.classList.remove('loaded');
-    // Reset retry counter
     delete lightboxImg.dataset.retryCount;
     
     setUIState('reset');
@@ -208,6 +199,21 @@ function closeLightbox() {
 }
 
 /**
+ * Standardized function to start the image loading process.
+ * Resets retry count and sets the source to the original (or freshly passed) URL.
+ */
+function startImageLoadSequence() {
+    // 0. Reset UI
+    setUIState('loading');
+    
+    // 1. Reset retry logic
+    lightboxImg.dataset.retryCount = '0';
+    
+    // 2. Start load
+    lightboxImg.src = originalFullUrl;
+}
+
+/**
  * Opens the lightbox.
  * @param {string} url - The URL of the full-resolution image.
  * @param {string|null} key - The S3 key/ID of the image for sharing.
@@ -218,14 +224,10 @@ export function openLightbox(url, key = null, thumbnailUrl = null) {
     gestureState.scale = 1;
     gestureState.translate = { x: 0, y: 0 };
     lightboxImg.classList.remove('zoomed', 'panning');
-    // Initialize retry counter to 0
-    lightboxImg.dataset.retryCount = '0';
     
     currentKey = key;
     currentThumbnailUrl = thumbnailUrl;
-    currentFullUrl = url;
-
-    setUIState('loading');
+    originalFullUrl = url;
 
     // Setup Load Handler
     lightboxImg.onload = () => {
@@ -252,7 +254,6 @@ export function openLightbox(url, key = null, thumbnailUrl = null) {
                 fetchSinglePhoto(currentKey, true)
                     .then(data => {
                         if (data && data.full_url) {
-                            currentFullUrl = data.full_url;
                             lightboxImg.src = data.full_url;
                         } else {
                             throw new Error("API returned no URL");
@@ -272,7 +273,6 @@ export function openLightbox(url, key = null, thumbnailUrl = null) {
             setUIState('loading');
             
             const proxyUrl = `/api/proxy/${encodeURIComponent(currentKey)}`;
-            currentFullUrl = proxyUrl; // Update button to use proxy too
             lightboxImg.src = proxyUrl;
 
         } else {
@@ -295,13 +295,11 @@ export function openLightbox(url, key = null, thumbnailUrl = null) {
     }
     
     lightboxImg.decoding = 'auto';
-    lightboxImg.src = url;
-    
-    if (lightboxImg.complete && lightboxImg.naturalWidth > 0) {
-        lightboxImg.onload();
-    }
-
     lightboxImg.draggable = false;
+    
+    // Start the load
+    startImageLoadSequence();
+
     lightbox.classList.add('active');
     document.body.style.overflow = 'hidden';
 
@@ -326,6 +324,15 @@ export function openLightbox(url, key = null, thumbnailUrl = null) {
 
 export function initLightbox() {
     closeBtn.addEventListener('click', closeLightbox);
+    
+    // Reload Button Handler
+    if (lightboxReloadBtn) {
+        lightboxReloadBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            startImageLoadSequence();
+        });
+    }
+
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && lightbox.classList.contains('active')) {
             closeLightbox();

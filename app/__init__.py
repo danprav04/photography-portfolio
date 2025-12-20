@@ -28,7 +28,6 @@ API_CACHE_FILE = os.path.join(API_CACHE_DIR, 'gallery_cache_v2.json')
 
 # Cache expires every 24 hours because EXIF extraction is network/CPU intensive.
 # Note: This controls the SERVER SIDE metadata cache (dimensions/dates).
-# It does NOT control the browser cache for signed URLs.
 CACHE_EXPIRATION_SECONDS = 86400 
 
 THUMBNAIL_MAX_WIDTH = 400
@@ -129,7 +128,7 @@ def process_single_object(obj, bucket_name):
 def get_presigned_url_params(bucket, key):
     """
     Helper to generate the correct parameters for a presigned URL.
-    Forces correct Content-Type, Content-Disposition, and NO CACHE headers.
+    Forces correct Content-Type, Content-Disposition, and Caching headers.
     """
     # Guess mime type based on file extension
     mime_type, _ = mimetypes.guess_type(key)
@@ -147,8 +146,8 @@ def get_presigned_url_params(bucket, key):
         'Key': key,
         'ResponseContentType': mime_type,
         'ResponseContentDisposition': 'inline',
-        # Strictly forbid browser/proxy caching of the image content itself
-        'ResponseCacheControl': 'no-store, no-cache, must-revalidate, max-age=0'
+        # Allow browser caching for 15 minutes (900 seconds)
+        'ResponseCacheControl': 'public, max-age=900'
     }
 
 def create_app():
@@ -210,10 +209,8 @@ def create_app():
             response = Response(generate(), mimetype=s3_response['ContentType'])
             response.headers['Content-Length'] = s3_response['ContentLength']
             
-            # Ensure the proxy response is also strictly not cached
-            response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
-            response.headers['Pragma'] = 'no-cache'
-            response.headers['Expires'] = '0'
+            # Allow caching for 15 minutes (900 seconds)
+            response.headers['Cache-Control'] = 'public, max-age=900'
             
             return response
         except ClientError as e:
@@ -247,7 +244,8 @@ def create_app():
                 'thumbnail_url': url_for('get_thumbnail', object_key=object_key, _external=False)
             })
             
-            # Prevent browser caching of this JSON response
+            # LINKS/JSON should NOT be cached, so we always get a valid link.
+            # The actual image (full_url) *will* be cached by the browser based on ResponseCacheControl above.
             response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
             response.headers['Pragma'] = 'no-cache'
             response.headers['Expires'] = '0'
@@ -334,7 +332,7 @@ def create_app():
             
             response = make_response(jsonify(photo_data))
             
-            # 3. Disable Browser Caching
+            # LINKS/JSON should NOT be cached.
             response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
             response.headers['Pragma'] = 'no-cache'
             response.headers['Expires'] = '0'

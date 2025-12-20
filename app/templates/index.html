@@ -108,6 +108,13 @@
                 My work is available for licensing on the following platforms.
             </p>
             <div class="stock-grid">
+                {% if content.stock_adobe %}
+                <a href="{{ content.stock_adobe }}" target="_blank" rel="noopener noreferrer" class="stock-card">
+                    <span class="stock-name">Adobe Stock</span>
+                    <span class="stock-link-text">Visit Portfolio &rarr;</span>
+                </a>
+                {% endif %}
+
                 {% if content.stock_shutterstock %}
                 <a href="{{ content.stock_shutterstock }}" target="_blank" rel="noopener noreferrer" class="stock-card">
                     <span class="stock-name">Shutterstock</span>
@@ -125,13 +132,6 @@
                 {% if content.stock_dreamstime %}
                 <a href="{{ content.stock_dreamstime }}" target="_blank" rel="noopener noreferrer" class="stock-card">
                     <span class="stock-name">Dreamstime</span>
-                    <span class="stock-link-text">Visit Portfolio &rarr;</span>
-                </a>
-                {% endif %}
-
-                {% if content.stock_adobe %}
-                <a href="{{ content.stock_adobe }}" target="_blank" rel="noopener noreferrer" class="stock-card">
-                    <span class="stock-name">Adobe Stock</span>
                     <span class="stock-link-text">Visit Portfolio &rarr;</span>
                 </a>
                 {% endif %}

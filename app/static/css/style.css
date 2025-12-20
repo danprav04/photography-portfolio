@@ -340,11 +340,15 @@ main {
 
 /* --- Stock Portfolio Section --- */
 .stock-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 2rem;
+    display: flex;
+    flex-wrap: wrap;
     justify-content: center;
+    gap: 2rem;
     margin-top: 2rem;
+    /* Prevent it from getting too wide, helps 2x2 symmetry */
+    max-width: 1000px;
+    margin-left: auto;
+    margin-right: auto;
 }
 
 .stock-card {
@@ -358,6 +362,11 @@ main {
     border-radius: 4px;
     text-decoration: none;
     transition: all 0.2s ease;
+    
+    /* Flex Sizing: standardizing width for better alignment */
+    flex: 1 1 280px; 
+    max-width: 400px;
+    width: 100%; /* Ensure full width on mobile */
 }
 
 .stock-card:hover {
@@ -783,5 +792,7 @@ main {
     .content-section h2 { font-size: 2rem; }
     .gear-grid { grid-template-columns: 1fr; }
     /* Stock Section mobile adjustment */
-    .stock-grid { grid-template-columns: 1fr; max-width: 400px; margin-left: auto; margin-right: auto; }
+    .stock-grid { 
+        max-width: 100%; 
+    }
 }

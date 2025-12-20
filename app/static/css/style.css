@@ -50,10 +50,7 @@ img {
     -khtml-user-drag: none;
     -moz-user-drag: none;
     -o-user-drag: none;
-    -webkit-user-drag: none;
-    
-    user-select: none;
-    -webkit-user-select: none;
+    user-drag: none;
 
     /* 
        By default, disable pointer events on images.
@@ -742,15 +739,59 @@ main {
     z-index: 1001;
 }
 
-.lightbox-error-msg {
-    display: none;
-    color: #ff6b6b;
-    font-size: 1.2rem;
+/* Lightbox Status & Fallback Button */
+.lightbox-status {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    text-align: center;
+    width: 80%;
+    max-width: 400px;
     z-index: 1001;
+    display: none; /* Hidden by default */
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    pointer-events: none; /* Let clicks pass through if just showing text */
 }
 
-.lightbox-error-msg.active {
-    display: block;
+.lightbox-status.active {
+    display: flex;
+}
+
+.lightbox-message-text {
+    color: #ff6b6b;
+    font-size: 1.2rem;
+    font-weight: 500;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+}
+
+.lightbox-action-btn {
+    pointer-events: auto; /* Enable clicking */
+    display: inline-block;
+    padding: 12px 24px;
+    background-color: rgba(30, 30, 30, 0.8);
+    border: 1px solid var(--accent-color);
+    color: var(--accent-color);
+    text-decoration: none;
+    text-transform: uppercase;
+    font-size: 0.9rem;
+    letter-spacing: 0.1em;
+    border-radius: 4px;
+    backdrop-filter: blur(4px);
+    transition: all 0.2s ease;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+    display: none; /* Hidden until needed */
+}
+
+.lightbox-action-btn.active {
+    display: inline-block;
+}
+
+.lightbox-action-btn:hover {
+    background-color: var(--accent-color);
+    color: #000;
 }
 
 .lightbox-close {

@@ -167,7 +167,15 @@
         
         <!-- Loading spinner for the lightbox image -->
         <div id="lightbox-spinner" class="loader-spinner"></div>
-        <div id="lightbox-error" class="lightbox-error-msg">Image failed to load.</div>
+        
+        <!-- Status Container (Error or Fallback Message) -->
+        <div id="lightbox-status" class="lightbox-status">
+            <div id="lightbox-message" class="lightbox-message-text"></div>
+            <!-- Fallback button -->
+            <a id="lightbox-action-btn" class="lightbox-action-btn" href="#" target="_blank" rel="noopener noreferrer">
+                View Original
+            </a>
+        </div>
         
         <img class="lightbox-content" id="lightbox-img" alt="Fullscreen view">
         

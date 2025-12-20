@@ -4,7 +4,11 @@ import { fetchSinglePhoto } from './api.js';
 const lightbox = document.getElementById('lightbox');
 const lightboxImg = document.getElementById('lightbox-img');
 const lightboxSpinner = document.getElementById('lightbox-spinner');
-const lightboxError = document.getElementById('lightbox-error');
+// New Elements
+const lightboxStatus = document.getElementById('lightbox-status');
+const lightboxMessage = document.getElementById('lightbox-message');
+const lightboxActionBtn = document.getElementById('lightbox-action-btn');
+
 const closeBtn = document.querySelector('.lightbox-close');
 const zoomInBtn = document.getElementById('zoom-in-btn');
 const zoomOutBtn = document.getElementById('zoom-out-btn');
@@ -24,6 +28,7 @@ const gestureState = {
 let isUpdateQueued = false;
 let currentKey = null;
 let currentThumbnailUrl = null;
+let currentFullUrl = null;
 
 // --- URL State Management ---
 function updateUrlState(key) {
@@ -86,7 +91,7 @@ function setScale(newScale, center = { x: window.innerWidth / 2, y: window.inner
 
 // --- Event Handlers for Gestures ---
 const onPointerDown = (e) => {
-    if (e.target.closest('.lightbox-controls') || e.target.closest('.lightbox-close')) return;
+    if (e.target.closest('.lightbox-controls') || e.target.closest('.lightbox-close') || e.target.closest('.lightbox-status')) return;
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     e.preventDefault();
     if (gestureState.scale > gestureState.minScale) {
@@ -138,33 +143,43 @@ const onTouchMove = (e) => {
 
 // --- Error & Fallback UI ---
 function setUIState(state, message = "") {
-    // States: 'loading', 'loaded', 'error', 'fallback'
+    // Hide everything first
+    if (lightboxSpinner) lightboxSpinner.classList.remove('active');
+    if (lightboxStatus) lightboxStatus.classList.remove('active');
+    if (lightboxActionBtn) lightboxActionBtn.classList.remove('active');
     
     if (state === 'loading') {
         if (lightboxSpinner) lightboxSpinner.classList.add('active');
-        if (lightboxError) lightboxError.classList.remove('active');
         lightboxImg.classList.remove('loaded');
     } 
     else if (state === 'loaded') {
-        if (lightboxSpinner) lightboxSpinner.classList.remove('active');
-        if (lightboxError) lightboxError.classList.remove('active');
         lightboxImg.classList.add('loaded');
     }
     else if (state === 'error') {
-        if (lightboxSpinner) lightboxSpinner.classList.remove('active');
-        if (lightboxError) {
-            lightboxError.textContent = message || "Image failed to load.";
-            lightboxError.style.color = "#ff6b6b";
-            lightboxError.classList.add('active');
+        if (lightboxStatus) lightboxStatus.classList.add('active');
+        if (lightboxMessage) {
+            lightboxMessage.textContent = message || "Image failed to load.";
+            lightboxMessage.style.color = "#ff6b6b";
+        }
+        // Show button if we have a URL to link to
+        if (currentFullUrl && lightboxActionBtn) {
+            lightboxActionBtn.href = currentFullUrl;
+            lightboxActionBtn.textContent = "Open Original Image";
+            lightboxActionBtn.classList.add('active');
         }
     }
     else if (state === 'fallback') {
-        if (lightboxSpinner) lightboxSpinner.classList.remove('active');
-        // We reuse the error div but style it as a warning
-        if (lightboxError) {
-            lightboxError.textContent = "Preview Mode (Low Resolution)";
-            lightboxError.style.color = "var(--accent-color)";
-            lightboxError.classList.add('active');
+        // We reuse the status div but style it as a warning
+        if (lightboxStatus) lightboxStatus.classList.add('active');
+        if (lightboxMessage) {
+            lightboxMessage.textContent = "Preview Mode (Low Resolution)";
+            lightboxMessage.style.color = "var(--accent-color)";
+        }
+        // Also show the button to open full res
+        if (currentFullUrl && lightboxActionBtn) {
+            lightboxActionBtn.href = currentFullUrl;
+            lightboxActionBtn.textContent = "View Original";
+            lightboxActionBtn.classList.add('active');
         }
         lightboxImg.classList.add('loaded');
     }
@@ -180,7 +195,7 @@ function closeLightbox() {
     lightboxImg.classList.remove('loaded');
     delete lightboxImg.dataset.retried;
     
-    setUIState('reset'); // Hides spinner/error
+    setUIState('reset');
 
     // Remove listeners
     lightbox.removeEventListener('wheel', onWheel);
@@ -208,6 +223,7 @@ export function openLightbox(url, key = null, thumbnailUrl = null) {
     delete lightboxImg.dataset.retried;
     currentKey = key;
     currentThumbnailUrl = thumbnailUrl;
+    currentFullUrl = url;
 
     setUIState('loading');
 
@@ -230,18 +246,23 @@ export function openLightbox(url, key = null, thumbnailUrl = null) {
             
             setUIState('loading');
             
-            fetchSinglePhoto(currentKey, true)
-                .then(data => {
-                    if (data && data.full_url) {
-                        lightboxImg.src = data.full_url;
-                    } else {
-                        throw new Error("API returned no URL");
-                    }
-                })
-                .catch(err => {
-                    console.error("Retry failed:", err);
-                    triggerFallback();
-                });
+            // Add a small delay to allow memory GC or network stability
+            setTimeout(() => {
+                fetchSinglePhoto(currentKey, true)
+                    .then(data => {
+                        if (data && data.full_url) {
+                            currentFullUrl = data.full_url; // Update for button
+                            lightboxImg.src = data.full_url;
+                        } else {
+                            throw new Error("API returned no URL");
+                        }
+                    })
+                    .catch(err => {
+                        console.error("Retry failed:", err);
+                        triggerFallback();
+                    });
+            }, 500); // 500ms delay
+
         } else {
             // 2. Second Retry: Fallback to Thumbnail
             triggerFallback();
@@ -261,7 +282,8 @@ export function openLightbox(url, key = null, thumbnailUrl = null) {
         }
     }
     
-    lightboxImg.decoding = 'async';
+    // REMOVED 'async' decoding to help mobile browsers with limited memory/rendering 
+    lightboxImg.decoding = 'auto'; // Default behavior
     lightboxImg.src = url;
     
     if (lightboxImg.complete && lightboxImg.naturalWidth > 0) {

@@ -8,8 +8,8 @@ WORKDIR /app
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
 # Set the number of Gunicorn workers.
-# A common starting point is (2 * CPU_CORES) + 1.
-ENV GUNICORN_WORKERS 3
+# Reduced to 1 per user request (optimized for low-resource environments).
+ENV GUNICORN_WORKERS 1
 
 # Stage 4: Install system dependencies for Pillow and application dependencies
 # Copy the requirements file first to leverage Docker cache

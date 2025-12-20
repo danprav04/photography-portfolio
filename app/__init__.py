@@ -12,7 +12,10 @@ import boto3
 from botocore.client import Config as BotocoreConfig
 from botocore.exceptions import ClientError
 from app.config import Config
-from PIL import Image, ExifTags
+from PIL import Image, ExifTags, ImageFile
+
+# Allow Pillow to handle truncated images (essential for Range-based metadata extraction)
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 # Initialize mimetypes to ensure we can guess correctly
 mimetypes.init()
@@ -26,8 +29,7 @@ API_CACHE_DIR = os.path.join(CACHE_BASE_DIR, 'api')
 # Version 2 cache file to ensure width/height metadata is rebuilt
 API_CACHE_FILE = os.path.join(API_CACHE_DIR, 'gallery_cache_v2.json')
 
-# Cache expires every 24 hours because EXIF extraction is network/CPU intensive.
-# Note: This controls the SERVER SIDE metadata cache (dimensions/dates).
+# Cache expires every 24 hours.
 CACHE_EXPIRATION_SECONDS = 86400 
 
 THUMBNAIL_MAX_WIDTH = 400
@@ -58,14 +60,19 @@ def _get_date_from_filename(object_key):
 
 def _extract_image_metadata(bucket_name, key):
     """
-    Downloads the image into memory and extracts Dimensions and DateTimeOriginal.
-    Handles orientation to ensure width/height match the visual aspect ratio.
-    Returns a dict with 'date', 'width', and 'height'.
+    Downloads the START of the image into memory to extract Dimensions and DateTimeOriginal.
+    Optimized to use Range header to avoid downloading full files.
     """
     meta = {'date': None, 'width': None, 'height': None}
     try:
-        # Download image to memory (avoid disk I/O)
-        response = s3_client.get_object(Bucket=bucket_name, Key=key)
+        # OPTIMIZATION: Download only the first 2MB. 
+        # This is usually enough for Header + EXIF data.
+        # This prevents Memory Exhaustion on the server.
+        response = s3_client.get_object(
+            Bucket=bucket_name, 
+            Key=key, 
+            Range='bytes=0-2097152' # 2MB
+        )
         image_data = response['Body'].read()
         
         with Image.open(io.BytesIO(image_data)) as img:
@@ -286,7 +293,11 @@ def create_app():
                         raw_objects.extend(page['Contents'])
                 
                 processed_objects = []
-                with ThreadPoolExecutor(max_workers=20) as executor:
+                
+                # OPTIMIZATION: Reduced max_workers from 20 to 4.
+                # Since we are running on a single worker process now,
+                # too many threads will cause context switching overhead and memory spikes.
+                with ThreadPoolExecutor(max_workers=4) as executor:
                     future_to_obj = {
                         executor.submit(process_single_object, obj, bucket_name): obj 
                         for obj in raw_objects

@@ -114,9 +114,6 @@ function renderCarousel(featuredPhotos) {
         img.dataset.fullSrc = photo.full_url;
         img.alt = 'Featured Portfolio Image';
         
-        // Prevent default drag to allow our custom swipe logic
-        img.addEventListener('dragstart', (e) => e.preventDefault());
-
         const spinner = document.createElement('div');
         spinner.className = 'loader-spinner';
 
@@ -125,8 +122,10 @@ function renderCarousel(featuredPhotos) {
 
         lazyLoadObserver.observe(slide);
 
-        // Click to open lightbox (only if not dragging)
-        img.addEventListener('click', (e) => {
+        // SECURITY: Click listener is attached to the slide container, NOT the image.
+        // The image has pointer-events: none via CSS, so clicks pass through to 'slide'.
+        slide.addEventListener('click', (e) => {
+            // Ensure we aren't dragging and that the loader isn't covering interaction
             if (!slide.classList.contains('loading') && !isDragging) {
                 openLightbox(photo.full_url, photo.key);
             }
@@ -137,7 +136,8 @@ function renderCarousel(featuredPhotos) {
         dot.className = 'carousel-indicator';
         dot.ariaLabel = `Go to slide ${index + 1}`;
         carouselNav.appendChild(dot);
-        dot.addEventListener('click', () => {
+        dot.addEventListener('click', (e) => {
+            e.stopPropagation(); // Prevent bubbling to slide click
             moveToSlide(index);
             pauseAutoPlay();
         });
@@ -219,8 +219,9 @@ function renderGallery(galleryPhotos) {
         
         lazyLoadObserver.observe(galleryItem);
 
-        // Pass the key to openLightbox for sharing support
-        img.addEventListener('click', () => {
+        // SECURITY: Click listener is on the container (galleryItem).
+        // Image has pointer-events: none, so clicks pass through.
+        galleryItem.addEventListener('click', () => {
             if (!galleryItem.classList.contains('loading')) {
                 openLightbox(photo.full_url, photo.key);
             }
@@ -298,13 +299,16 @@ function getPositionX(event) {
     return event.type.includes('mouse') ? event.pageX : event.touches[0].clientX;
 }
 
-function touchStart(index) {
-    return function(event) {
-        isDragging = true;
-        startPos = getPositionX(event);
-        carouselTrack.style.transition = 'none'; // Remove transition for instant drag following
-        pauseAutoPlay();
+function touchStart(event) {
+    // Only drag if not touching a control button
+    if (event.target.closest('.carousel-controls') || event.target.closest('.carousel-nav')) {
+        return;
     }
+    
+    isDragging = true;
+    startPos = getPositionX(event);
+    carouselTrack.style.transition = 'none'; // Remove transition for instant drag following
+    pauseAutoPlay();
 }
 
 function touchMove(event) {
@@ -320,6 +324,7 @@ function touchMove(event) {
 }
 
 function touchEnd() {
+    if (!isDragging) return;
     isDragging = false;
     carouselTrack.style.transition = 'transform 0.5s ease-out';
     
@@ -349,11 +354,13 @@ export function initUI(allPhotos) {
 
     // Carousel Button Listeners
     if (prevButton && nextButton) {
-        prevButton.addEventListener('click', () => {
+        prevButton.addEventListener('click', (e) => {
+            e.stopPropagation();
             prevSlide();
             pauseAutoPlay();
         });
-        nextButton.addEventListener('click', () => {
+        nextButton.addEventListener('click', (e) => {
+            e.stopPropagation();
             nextSlide();
             pauseAutoPlay();
         });

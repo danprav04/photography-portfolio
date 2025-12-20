@@ -68,10 +68,31 @@ function initMobileMenu() {
 }
 
 /**
+ * Initializes security features to prevent easy image downloads.
+ */
+function initImageProtection() {
+    // Prevent context menu on all images and the lightbox
+    document.addEventListener('contextmenu', (e) => {
+        if (e.target.tagName === 'IMG' || e.target.classList.contains('lightbox-content')) {
+            e.preventDefault();
+            return false;
+        }
+    }, false);
+
+    // Prevent dragging images
+    document.addEventListener('dragstart', (e) => {
+        if (e.target.tagName === 'IMG') {
+            e.preventDefault();
+        }
+    });
+}
+
+/**
  * Initializes the application.
  */
 async function init() {
     // 1. Initialize global UI components
+    initImageProtection();
     initLightbox();
     initMobileMenu();
 

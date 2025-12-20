@@ -85,8 +85,14 @@ function setScale(newScale, center = { x: window.innerWidth / 2, y: window.inner
 
 // --- Event Handlers for Gestures ---
 const onPointerDown = (e) => {
+    // If the click is on controls or close button, do nothing (let default bubble)
+    if (e.target.closest('.lightbox-controls') || e.target.closest('.lightbox-close')) return;
+    
     if (e.pointerType === 'mouse' && e.button !== 0) return;
+    
+    // Prevent default browser dragging
     e.preventDefault();
+    
     if (gestureState.scale > gestureState.minScale) {
         gestureState.isPanning = true;
         gestureState.start = { x: e.clientX - gestureState.translate.x, y: e.clientY - gestureState.translate.y };
@@ -251,6 +257,12 @@ export function openLightbox(url, key = null) {
     lightbox.addEventListener('pointerleave', onPointerUp);
     lightbox.addEventListener('touchstart', onTouchStart, { passive: false });
     lightbox.addEventListener('touchmove', onTouchMove, { passive: false });
+    
+    // Specific security listener for lightbox image
+    lightboxImg.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        return false;
+    });
 }
 
 export function initLightbox() {
@@ -262,6 +274,8 @@ export function initLightbox() {
     });
 
     lightbox.addEventListener('click', (e) => {
+        // If clicking on the background (not image, not controls), close it.
+        // Also ensure we aren't clicking the image itself (which has pointer events).
         if (e.target === lightbox) {
             closeLightbox();
         }

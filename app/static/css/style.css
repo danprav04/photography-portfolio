@@ -38,6 +38,28 @@ body {
     -webkit-font-smoothing: antialiased;
 }
 
+/* --- IMAGE PROTECTION & SECURITY --- */
+img {
+    /* Disable user selection and dragging globally */
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    
+    -webkit-user-drag: none;
+    -khtml-user-drag: none;
+    -moz-user-drag: none;
+    -o-user-drag: none;
+    user-drag: none;
+
+    /* 
+       By default, disable pointer events on images.
+       This allows clicks to pass through to the container div.
+       Context menus triggered on the div will NOT show "Save Image".
+    */
+    pointer-events: none;
+}
+
 /* --- Typography --- */
 h1, h2, h3 {
     font-family: var(--font-heading);
@@ -454,6 +476,8 @@ main {
     align-items: center;
     justify-content: center;
     overflow: hidden;
+    /* Important for blocking downloads: The slide div captures the click */
+    z-index: 1;
 }
 
 .carousel-slide::before {
@@ -479,6 +503,11 @@ main {
     box-shadow: 0 0 20px rgba(0,0,0,0.5);
     opacity: 0;
     transition: opacity 0.5s ease;
+    /* 
+       Pointer events are disabled on images globally (above).
+       This ensures the user cannot drag/context-click the image element itself.
+       Interactions happen on the .carousel-slide container.
+    */
 }
 
 .carousel-slide img.loaded {
@@ -579,6 +608,8 @@ main {
     transform: translateY(20px);
     transition: transform 0.4s ease, filter 0.4s ease, opacity 0.6s ease;
     width: 100%;
+    /* Important: Make the container clickable since the image has pointer-events: none */
+    cursor: pointer;
 }
 
 .gallery-item.visible {
@@ -592,6 +623,7 @@ main {
     display: block;
     transition: transform 0.7s cubic-bezier(0.25, 0.46, 0.45, 0.94);
     opacity: 0;
+    /* pointer-events: none (inherited from global rule) */
 }
 
 .gallery-item img.loaded {
@@ -664,7 +696,7 @@ main {
     background-color: #000;
     justify-content: center;
     align-items: center;
-    touch-action: none;
+    touch-action: none; /* Critical for custom gestures */
     opacity: 0;
     transition: opacity 0.3s ease;
 }
@@ -681,6 +713,13 @@ main {
     transform: scale(0.95);
     transition: transform 0.3s cubic-bezier(0.2, 0, 0.2, 1), opacity 0.3s ease;
     opacity: 0; /* Hidden initially until loaded */
+    
+    /* 
+       OVERRIDE GLOBAL RULE: 
+       Lightbox image MUST receive pointer events for gestures (pinch/pan).
+       We will block the context menu via JS in lightbox.js instead.
+    */
+    pointer-events: auto !important; 
 }
 
 .lightbox.active .lightbox-content {

@@ -201,14 +201,15 @@ export function openLightbox(url, key = null) {
         
         // Retry Logic: If we have a key and haven't retried yet
         if (currentKey && lightboxImg.dataset.retried !== 'true') {
-            console.log(`Image load failed. Retrying fetch for ${currentKey}...`);
+            console.log(`Image load failed (likely expired). Clearing cache and retrying for ${currentKey}...`);
             lightboxImg.dataset.retried = 'true';
             
             // Show spinner again
             if (lightboxSpinner) lightboxSpinner.classList.add('active');
             if (lightboxError) lightboxError.classList.remove('active');
             
-            fetchSinglePhoto(currentKey)
+            // Pass 'true' to force a cache bypass
+            fetchSinglePhoto(currentKey, true)
                 .then(data => {
                     if (data && data.full_url) {
                         lightboxImg.src = data.full_url;

@@ -184,17 +184,32 @@ def create_app():
     def get_single_photo(object_key):
         """API endpoint to retrieve a presigned URL for a single specific photo."""
         try:
+            # Check existence first
             s3_client.head_object(Bucket=app.config['OCI_BUCKET_NAME'], Key=object_key)
+            
+            # Generate new signed URL
             full_url = s3_client.generate_presigned_url(
                 'get_object',
                 Params={'Bucket': app.config['OCI_BUCKET_NAME'], 'Key': object_key},
                 ExpiresIn=3600
             )
-            return jsonify({
+            
+            response = jsonify({
                 'key': object_key,
                 'full_url': full_url,
                 'thumbnail_url': url_for('get_thumbnail', object_key=object_key, _external=False)
             })
+            
+            # Prevent browser caching of this specific response.
+            # This is crucial for the retry logic: if the image fails loading, 
+            # we need the browser to hit this endpoint again to get a NEW signature,
+            # not return the old cached JSON with the expired signature.
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+            
+            return response
+
         except ClientError as e:
             if e.response.get("Error", {}).get("Code") == '404':
                 return jsonify({'error': 'Photo not found'}), 404

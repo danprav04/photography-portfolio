@@ -29,19 +29,29 @@ export async function loadPhotoData() {
 
 /**
  * Loads a single photo's details (Presigned URL) by its key.
- * Used for deep linking / sharing.
+ * Used for deep linking / sharing and for retrying expired links.
+ * 
  * @param {string} key - The S3 object key of the photo.
+ * @param {boolean} bypassCache - If true, adds a timestamp to force a fresh fetch from the server.
  * @returns {Promise<Object>} A promise resolving to the single photo object.
  * @throws {Error} If the fetch fails.
  */
-export async function fetchSinglePhoto(key) {
+export async function fetchSinglePhoto(key, bypassCache = false) {
     if (!key) throw new Error("No photo key provided");
-    
-    console.log(`Fetching single photo: ${key}`);
     
     // Encode the key to handle slashes/special chars in URL safe way
     const encodedKey = encodeURIComponent(key);
-    const response = await fetch(`/api/photo/${encodedKey}`);
+    let url = `/api/photo/${encodedKey}`;
+    
+    if (bypassCache) {
+        console.log(`Bypassing cache for photo: ${key}`);
+        // Add a timestamp query param to force the browser to make a network request
+        url += `?_t=${Date.now()}`;
+    } else {
+        console.log(`Fetching single photo: ${key}`);
+    }
+    
+    const response = await fetch(url);
     
     if (!response.ok) {
         // Throw error to be caught by the UI layer

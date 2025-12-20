@@ -50,7 +50,10 @@ img {
     -khtml-user-drag: none;
     -moz-user-drag: none;
     -o-user-drag: none;
-    user-drag: none;
+    -webkit-user-drag: none;
+    
+    user-select: none;
+    -webkit-user-select: none;
 
     /* 
        By default, disable pointer events on images.

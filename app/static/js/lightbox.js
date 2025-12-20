@@ -2,6 +2,7 @@
 const lightbox = document.getElementById('lightbox');
 const lightboxImg = document.getElementById('lightbox-img');
 const lightboxSpinner = document.getElementById('lightbox-spinner');
+const lightboxError = document.getElementById('lightbox-error');
 const closeBtn = document.querySelector('.lightbox-close');
 const zoomInBtn = document.getElementById('zoom-in-btn');
 const zoomOutBtn = document.getElementById('zoom-out-btn');
@@ -168,8 +169,9 @@ function closeLightbox() {
     lightboxImg.src = "";
     lightboxImg.classList.remove('loaded');
     
-    // Stop spinner
+    // Reset spinner and error
     if (lightboxSpinner) lightboxSpinner.classList.remove('active');
+    if (lightboxError) lightboxError.classList.remove('active');
 
     // Cleanup gesture event listeners to prevent memory leaks.
     lightbox.removeEventListener('wheel', onWheel);
@@ -193,23 +195,34 @@ export function openLightbox(url, key = null) {
     // Reset state for the new image.
     gestureState.scale = 1;
     gestureState.translate = { x: 0, y: 0 };
-    lightboxImg.classList.remove('zoomed', 'panning', 'loaded'); // Ensure 'loaded' is removed so opacity resets
+    lightboxImg.classList.remove('zoomed', 'panning', 'loaded'); 
     
-    // Show spinner immediately
+    // UI Reset
+    if (lightboxError) lightboxError.classList.remove('active');
     if (lightboxSpinner) lightboxSpinner.classList.add('active');
 
-    // Load logic
-    lightboxImg.onload = () => {
+    // --- Image Loading Logic ---
+    const handleLoad = () => {
         if (lightboxSpinner) lightboxSpinner.classList.remove('active');
-        lightboxImg.classList.add('loaded'); // Fade in
+        lightboxImg.classList.add('loaded'); // Trigger CSS fade-in
     };
 
-    lightboxImg.onerror = () => {
-         if (lightboxSpinner) lightboxSpinner.classList.remove('active');
-         // Optionally handle error state
+    const handleError = () => {
+        if (lightboxSpinner) lightboxSpinner.classList.remove('active');
+        if (lightboxError) lightboxError.classList.add('active');
     };
 
+    lightboxImg.onload = handleLoad;
+    lightboxImg.onerror = handleError;
+    
+    // Set source
     lightboxImg.src = url;
+    
+    // Check if cached immediately
+    if (lightboxImg.complete && lightboxImg.naturalWidth > 0) {
+        handleLoad();
+    }
+
     lightboxImg.draggable = false;
     lightbox.classList.add('active');
     document.body.style.overflow = 'hidden';
@@ -251,9 +264,6 @@ export function initLightbox() {
     // Listen for browser back button to close lightbox
     window.addEventListener('popstate', (e) => {
         if (lightbox.classList.contains('active')) {
-             // We manually close, but since the popstate already changed the URL,
-             // we don't want closeLightbox to pushState again.
-             // For simplicity, we just close the UI here.
              lightbox.classList.remove('active');
              document.body.style.overflow = 'auto';
         }

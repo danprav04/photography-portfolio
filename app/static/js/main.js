@@ -7,17 +7,11 @@ import { initGear } from './gear.js';
  * Handles the initial scroll to a hash anchor (e.g. #gear) if present.
  * This is necessary because dynamic content (like the carousel) is inserted
  * after the page load, pushing sections down.
- * 
- * We use requestAnimationFrame to wait for the DOM render to complete.
- * Because we now set aspect-ratio on images, the layout height is calculated
- * immediately, making the scroll target accurate.
  */
 function handleInitialScroll() {
     const hash = window.location.hash;
     
-    // Check if hash exists and isn't just an empty anchor or a potential photo ID (assuming IDs don't conflict with section names)
     if (hash && hash.length > 1) {
-        // Double RAF: First one waits for JS stack to clear, second waits for layout/paint.
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
                 try {
@@ -34,33 +28,69 @@ function handleInitialScroll() {
 }
 
 /**
+ * Initializes the mobile navigation toggle.
+ */
+function initMobileMenu() {
+    const toggleBtn = document.querySelector('.mobile-menu-toggle');
+    const nav = document.getElementById('main-nav');
+    const navLinks = document.querySelectorAll('.nav-link'); // Select text links
+
+    if (!toggleBtn || !nav) return;
+
+    toggleBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const expanded = toggleBtn.getAttribute('aria-expanded') === 'true';
+        toggleBtn.setAttribute('aria-expanded', !expanded);
+        toggleBtn.classList.toggle('active');
+        nav.classList.toggle('active');
+        document.body.style.overflow = !expanded ? 'hidden' : 'auto'; // Prevent scrolling when menu is open
+    });
+
+    // Close menu when clicking a link
+    navLinks.forEach(link => {
+        link.addEventListener('click', () => {
+            toggleBtn.setAttribute('aria-expanded', 'false');
+            toggleBtn.classList.remove('active');
+            nav.classList.remove('active');
+            document.body.style.overflow = 'auto';
+        });
+    });
+
+    // Close menu when clicking outside
+    document.addEventListener('click', (e) => {
+        if (nav.classList.contains('active') && !nav.contains(e.target) && !toggleBtn.contains(e.target)) {
+            toggleBtn.setAttribute('aria-expanded', 'false');
+            toggleBtn.classList.remove('active');
+            nav.classList.remove('active');
+            document.body.style.overflow = 'auto';
+        }
+    });
+}
+
+/**
  * Initializes the application.
- * This function orchestrates the fetching of data, rendering the UI,
- * and setting up interactive components like the lightbox.
  */
 async function init() {
-    // 1. Initialize the lightbox controls and base event listeners.
+    // 1. Initialize global UI components
     initLightbox();
+    initMobileMenu();
 
     // 2. Initialize Gear Section (if present)
-    // This adds content to the DOM immediately.
     const gearContainer = document.getElementById('gear-container');
     if (gearContainer) {
         const amazonTag = gearContainer.dataset.amazonTag;
         initGear('gear-container', amazonTag);
     }
 
-    // 3. Deep Linking Check: Check if a specific photo is requested via URL params.
+    // 3. Deep Linking Check
     const urlParams = new URLSearchParams(window.location.search);
     const sharedPhotoKey = urlParams.get('id');
 
     if (sharedPhotoKey) {
         console.log("Shared photo detected. Loading specifically...");
         try {
-            // Fetch only the specific photo first to ensure fast load time
             const singlePhoto = await fetchSinglePhoto(sharedPhotoKey);
             if (singlePhoto) {
-                // Open lightbox immediately
                 openLightbox(singlePhoto.full_url, sharedPhotoKey);
             }
         } catch (e) {
@@ -68,18 +98,14 @@ async function init() {
         }
     }
 
-    // 4. Load all photo data for the main gallery in the background
-    // (This happens regardless of whether a shared photo was opened)
+    // 4. Load all photo data
     const allPhotos = await loadPhotoData();
 
-    // 5. Render the UI (carousel and gallery) with the loaded data.
+    // 5. Render the UI
     if (allPhotos) {
         initUI(allPhotos);
-        
-        // 6. Fix scroll position after dynamic content insertion
         handleInitialScroll();
     } else {
-        // Display an error message if data could not be loaded.
         const galleryContainer = document.getElementById('gallery-container');
         if (galleryContainer) {
             galleryContainer.innerHTML = '<p class="status-message">Failed to load photos. Please try again later.</p>';
@@ -87,5 +113,4 @@ async function init() {
     }
 }
 
-// Start the application once the DOM is fully loaded.
 document.addEventListener('DOMContentLoaded', init);

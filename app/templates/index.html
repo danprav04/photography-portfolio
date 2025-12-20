@@ -20,11 +20,19 @@
     <header class="header">
         <div class="header-inner">
             <h1 class="logo">{{ content.title }}</h1>
-            <nav class="nav">
-                <a href="#gallery">Portfolio</a>
-                <a href="#about">About</a>
-                <a href="#gear">Gear</a>
-                <a href="#contact">Contact</a>
+            
+            <!-- Mobile Menu Toggle Button -->
+            <button class="mobile-menu-toggle" aria-label="Toggle navigation" aria-expanded="false">
+                <span class="hamburger-box">
+                    <span class="hamburger-inner"></span>
+                </span>
+            </button>
+
+            <nav class="nav" id="main-nav">
+                <a href="#gallery" class="nav-link">Portfolio</a>
+                <a href="#about" class="nav-link">About</a>
+                <a href="#gear" class="nav-link">Gear</a>
+                <a href="#contact" class="nav-link">Contact</a>
                 {% if content.instagram_url %}
                 <a href="{{ content.instagram_url }}" target="_blank" rel="noopener noreferrer" class="nav-icon-link" aria-label="Instagram">
                     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -116,6 +124,7 @@
         
         <!-- Loading spinner for the lightbox image -->
         <div id="lightbox-spinner" class="loader-spinner"></div>
+        <div id="lightbox-error" class="lightbox-error-msg">Image failed to load.</div>
         
         <img class="lightbox-content" id="lightbox-img" alt="Fullscreen view">
         

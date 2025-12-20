@@ -145,7 +145,10 @@ function closeLightbox() {
     delete lightboxImg.dataset.retried;
     
     if (lightboxSpinner) lightboxSpinner.classList.remove('active');
-    if (lightboxError) lightboxError.classList.remove('active');
+    if (lightboxError) {
+        lightboxError.classList.remove('active');
+        lightboxError.textContent = "Image failed to load."; // Reset default text
+    }
 
     // Remove listeners
     lightbox.removeEventListener('wheel', onWheel);
@@ -173,7 +176,10 @@ export function openLightbox(url, key = null) {
     currentKey = key;
     
     // UI Reset
-    if (lightboxError) lightboxError.classList.remove('active');
+    if (lightboxError) {
+        lightboxError.classList.remove('active');
+        lightboxError.textContent = "Image failed to load."; // Reset
+    }
     if (lightboxSpinner) lightboxSpinner.classList.add('active');
 
     // Setup Load Handler
@@ -201,16 +207,18 @@ export function openLightbox(url, key = null) {
                     if (data && data.full_url) {
                         lightboxImg.src = data.full_url;
                     } else {
-                        // Retry failed (no data)
-                        if (lightboxSpinner) lightboxSpinner.classList.remove('active');
-                        if (lightboxError) lightboxError.classList.add('active');
+                        throw new Error("API returned no URL");
                     }
                 })
                 .catch(err => {
-                    // Retry failed (network error)
+                    // Retry failed (network error or server 500/404)
                     console.error("Retry failed:", err);
                     if (lightboxSpinner) lightboxSpinner.classList.remove('active');
-                    if (lightboxError) lightboxError.classList.add('active');
+                    if (lightboxError) {
+                        // Display the actual error to help debugging
+                        lightboxError.textContent = `Error: ${err.message}`;
+                        lightboxError.classList.add('active');
+                    }
                 });
         } else {
             // No key or already retried -> Permanent Failure

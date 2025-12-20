@@ -31,24 +31,22 @@ export async function loadPhotoData() {
  * Loads a single photo's details (Presigned URL) by its key.
  * Used for deep linking / sharing.
  * @param {string} key - The S3 object key of the photo.
- * @returns {Promise<Object|null>} A promise resolving to the single photo object or null.
+ * @returns {Promise<Object>} A promise resolving to the single photo object.
+ * @throws {Error} If the fetch fails.
  */
 export async function fetchSinglePhoto(key) {
-    if (!key) return null;
+    if (!key) throw new Error("No photo key provided");
+    
     console.log(`Fetching single photo: ${key}`);
-    try {
-        // Encode the key to handle slashes/special chars in URL safe way
-        const encodedKey = encodeURIComponent(key);
-        const response = await fetch(`/api/photo/${encodedKey}`);
-        
-        if (!response.ok) {
-            console.warn(`Could not load shared photo: ${response.status}`);
-            return null;
-        }
-        
-        return await response.json();
-    } catch (error) {
-        console.error("Error fetching single photo:", error);
-        return null;
+    
+    // Encode the key to handle slashes/special chars in URL safe way
+    const encodedKey = encodeURIComponent(key);
+    const response = await fetch(`/api/photo/${encodedKey}`);
+    
+    if (!response.ok) {
+        // Throw error to be caught by the UI layer
+        throw new Error(`Server error: ${response.status}`);
     }
+    
+    return await response.json();
 }

@@ -4,6 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
     <meta name="description" content="{{ content.meta_description }}">
+    <meta name="author" content="{{ content.title }}">
+    <meta name="theme-color" content="#0b0c10">
+
+    <!-- Open Graph / Facebook / Instagram Metadata -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="{{ request.url }}">
+    <meta property="og:title" content="{{ content.title }}">
+    <meta property="og:description" content="{{ content.meta_description }}">
+    <meta property="og:site_name" content="{{ content.title }}">
+    
+    <!-- 
+       TIP: For the best Instagram experience, add a 'preview.jpg' to your 
+       'app/static/img/' folder and uncomment the line below. 
+       This gives Instagram a specific image to show in DMs/feed.
+    -->
+    <meta property="og:image" content="{{ url_for('static', filename='img/preview.jpg', _external=True) }}">
+
     <title>{{ content.title }}</title>
     
     <!-- Google Fonts -->

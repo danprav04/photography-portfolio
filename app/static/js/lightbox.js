@@ -161,7 +161,6 @@ function setUIState(state, message = "") {
             lightboxMessage.textContent = message || "Image failed to load.";
             lightboxMessage.style.color = "#ff6b6b";
         }
-        // Show button if we have a URL to link to
         if (currentFullUrl && lightboxActionBtn) {
             lightboxActionBtn.href = currentFullUrl;
             lightboxActionBtn.textContent = "Open Original Image";
@@ -169,13 +168,11 @@ function setUIState(state, message = "") {
         }
     }
     else if (state === 'fallback') {
-        // We reuse the status div but style it as a warning
         if (lightboxStatus) lightboxStatus.classList.add('active');
         if (lightboxMessage) {
             lightboxMessage.textContent = "Preview Mode (Low Resolution)";
             lightboxMessage.style.color = "var(--accent-color)";
         }
-        // Also show the button to open full res
         if (currentFullUrl && lightboxActionBtn) {
             lightboxActionBtn.href = currentFullUrl;
             lightboxActionBtn.textContent = "View Original";
@@ -193,7 +190,8 @@ function closeLightbox() {
     // Cleanup
     lightboxImg.src = "";
     lightboxImg.classList.remove('loaded');
-    delete lightboxImg.dataset.retried;
+    // Reset retry counter
+    delete lightboxImg.dataset.retryCount;
     
     setUIState('reset');
 
@@ -220,7 +218,9 @@ export function openLightbox(url, key = null, thumbnailUrl = null) {
     gestureState.scale = 1;
     gestureState.translate = { x: 0, y: 0 };
     lightboxImg.classList.remove('zoomed', 'panning');
-    delete lightboxImg.dataset.retried;
+    // Initialize retry counter to 0
+    lightboxImg.dataset.retryCount = '0';
+    
     currentKey = key;
     currentThumbnailUrl = thumbnailUrl;
     currentFullUrl = url;
@@ -239,39 +239,51 @@ export function openLightbox(url, key = null, thumbnailUrl = null) {
 
     // Setup Error/Retry Handler
     lightboxImg.onerror = () => {
-        // 1. First Retry: Bypass Cache (Timestamp)
-        if (currentKey && lightboxImg.dataset.retried !== 'true') {
-            console.log(`Image load failed. Retrying with cache-busting for ${currentKey}...`);
-            lightboxImg.dataset.retried = 'true';
-            
+        const retryCount = parseInt(lightboxImg.dataset.retryCount || '0');
+        console.log(`Image load error. Retry count: ${retryCount}`);
+
+        if (currentKey && retryCount === 0) {
+            // Attempt 1: Fetch FRESH signed URL from API (bypassing expired cache)
+            console.log("Attempt 1: Fetching fresh signed URL...");
+            lightboxImg.dataset.retryCount = '1';
             setUIState('loading');
             
-            // Add a small delay to allow memory GC or network stability
             setTimeout(() => {
                 fetchSinglePhoto(currentKey, true)
                     .then(data => {
                         if (data && data.full_url) {
-                            currentFullUrl = data.full_url; // Update for button
+                            currentFullUrl = data.full_url;
                             lightboxImg.src = data.full_url;
                         } else {
                             throw new Error("API returned no URL");
                         }
                     })
                     .catch(err => {
-                        console.error("Retry failed:", err);
-                        triggerFallback();
+                        console.error("Retry 1 failed:", err);
+                        // Force a second error event to trigger next retry step
+                        lightboxImg.onerror(); 
                     });
-            }, 500); // 500ms delay
+            }, 300);
+
+        } else if (currentKey && retryCount === 1) {
+            // Attempt 2: Fallback to PROXY URL (bypassing Client SSL/Network blocks)
+            console.warn("Attempt 2: Direct link failed. Switching to server proxy.");
+            lightboxImg.dataset.retryCount = '2';
+            setUIState('loading');
+            
+            const proxyUrl = `/api/proxy/${encodeURIComponent(currentKey)}`;
+            currentFullUrl = proxyUrl; // Update button to use proxy too
+            lightboxImg.src = proxyUrl;
 
         } else {
-            // 2. Second Retry: Fallback to Thumbnail
+            // Attempt 3: Final Fallback to Thumbnail
+            console.warn("All full-res attempts failed. Showing thumbnail.");
             triggerFallback();
         }
     };
 
     function triggerFallback() {
         if (currentThumbnailUrl) {
-            console.warn("Full image failed. Falling back to thumbnail.");
             // Prevent infinite loop if thumbnail also fails
             lightboxImg.onerror = () => {
                 setUIState('error', "Image failed to load.");
@@ -282,8 +294,7 @@ export function openLightbox(url, key = null, thumbnailUrl = null) {
         }
     }
     
-    // REMOVED 'async' decoding to help mobile browsers with limited memory/rendering 
-    lightboxImg.decoding = 'auto'; // Default behavior
+    lightboxImg.decoding = 'auto';
     lightboxImg.src = url;
     
     if (lightboxImg.complete && lightboxImg.naturalWidth > 0) {

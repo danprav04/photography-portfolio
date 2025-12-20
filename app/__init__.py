@@ -7,7 +7,7 @@ import io
 import mimetypes
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from flask import Flask, render_template, jsonify, request, make_response, send_from_directory, url_for
+from flask import Flask, render_template, jsonify, request, make_response, send_from_directory, url_for, Response
 import boto3
 from botocore.client import Config as BotocoreConfig
 from botocore.exceptions import ClientError
@@ -129,7 +129,7 @@ def process_single_object(obj, bucket_name):
 def get_presigned_url_params(bucket, key):
     """
     Helper to generate the correct parameters for a presigned URL.
-    Forces correct Content-Type and Content-Disposition headers.
+    Forces correct Content-Type, Content-Disposition, and NO CACHE headers.
     """
     # Guess mime type based on file extension
     mime_type, _ = mimetypes.guess_type(key)
@@ -146,7 +146,9 @@ def get_presigned_url_params(bucket, key):
         'Bucket': bucket,
         'Key': key,
         'ResponseContentType': mime_type,
-        'ResponseContentDisposition': 'inline'
+        'ResponseContentDisposition': 'inline',
+        # Strictly forbid browser/proxy caching of the image content itself
+        'ResponseCacheControl': 'no-store, no-cache, must-revalidate, max-age=0'
     }
 
 def create_app():
@@ -190,6 +192,39 @@ def create_app():
         }
         return render_template('index.html', content=content)
 
+    @app.route('/api/proxy/<path:object_key>')
+    def proxy_photo(object_key):
+        """
+        Proxies the image through the server to bypass client-side SSL/Network issues.
+        Used as a fallback when direct OCI links fail.
+        """
+        try:
+            bucket_name = app.config['OCI_BUCKET_NAME']
+            # Stream the object from S3 to avoid loading large files into RAM
+            s3_response = s3_client.get_object(Bucket=bucket_name, Key=object_key)
+            
+            def generate():
+                for chunk in s3_response['Body'].iter_chunks(chunk_size=4096):
+                    yield chunk
+
+            response = Response(generate(), mimetype=s3_response['ContentType'])
+            response.headers['Content-Length'] = s3_response['ContentLength']
+            
+            # Ensure the proxy response is also strictly not cached
+            response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+            
+            return response
+        except ClientError as e:
+            if e.response.get("Error", {}).get("Code") == '404':
+                return "Photo not found", 404
+            print(f"Proxy ClientError: {e}")
+            return "Error fetching image", 500
+        except Exception as e:
+            print(f"Proxy Unexpected Error: {e}")
+            return "Internal server error", 500
+
     @app.route('/api/photo/<path:object_key>')
     def get_single_photo(object_key):
         """API endpoint to retrieve a presigned URL for a single specific photo."""
@@ -197,7 +232,7 @@ def create_app():
             # Check existence first
             s3_client.head_object(Bucket=app.config['OCI_BUCKET_NAME'], Key=object_key)
             
-            # Generate new signed URL with explicit content type
+            # Generate new signed URL with explicit content type and cache control
             params = get_presigned_url_params(app.config['OCI_BUCKET_NAME'], object_key)
             
             full_url = s3_client.generate_presigned_url(
@@ -212,8 +247,7 @@ def create_app():
                 'thumbnail_url': url_for('get_thumbnail', object_key=object_key, _external=False)
             })
             
-            # Prevent browser caching of this specific response completely
-            # This ensures that if the user clicks the link, it is fresh.
+            # Prevent browser caching of this JSON response
             response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
             response.headers['Pragma'] = 'no-cache'
             response.headers['Expires'] = '0'
@@ -232,8 +266,6 @@ def create_app():
         """API endpoint to retrieve sorted photo data."""
         try:
             # 1. Handle SERVER-SIDE Metadata Caching
-            # We cache the list of objects and their dimensions/dates to avoid hitting S3 'ListObjects'
-            # and downloading headers for EXIF data on every request.
             cache_is_valid = False
             if os.path.exists(API_CACHE_FILE):
                 modification_time = os.path.getmtime(API_CACHE_FILE)
@@ -256,7 +288,6 @@ def create_app():
                         raw_objects.extend(page['Contents'])
                 
                 processed_objects = []
-                # Use threads to fetch metadata for new files faster
                 with ThreadPoolExecutor(max_workers=20) as executor:
                     future_to_obj = {
                         executor.submit(process_single_object, obj, bucket_name): obj 
@@ -274,7 +305,7 @@ def create_app():
                     reverse=True
                 )
 
-                # Save metadata to cache (Does NOT include signed URLs)
+                # Save metadata to cache
                 temp_file_path = API_CACHE_FILE + f".tmp-{os.getpid()}"
                 with open(temp_file_path, 'w') as f:
                     json.dump({'objects': sorted_objects}, f)
@@ -284,19 +315,13 @@ def create_app():
                 os.rename(temp_file_path, API_CACHE_FILE)
 
             # 2. Generate Fresh Response for Client
-            # We explicitly do NOT return a 304 Not Modified here.
-            # Even if the list of photos is the same, the Presigned URLs inside
-            # the JSON are time-sensitive and must be regenerated for every request.
-            
             photo_data = []
             for obj in sorted_objects:
                 key = obj['Key']
-                # Generate parameters for signed URL to force correct Content-Type
                 params = get_presigned_url_params(app.config['OCI_BUCKET_NAME'], key)
                 
                 photo_data.append({
                     'key': key,
-                    # Generate a fresh URL valid for 1 hour
                     'full_url': s3_client.generate_presigned_url(
                         'get_object', 
                         Params=params, 
@@ -310,10 +335,6 @@ def create_app():
             response = make_response(jsonify(photo_data))
             
             # 3. Disable Browser Caching
-            # Crucial: Tell the browser/proxies never to store this JSON response.
-            # This ensures that if the user reloads the page 2 hours later,
-            # they get a new JSON payload with new valid URLs, rather than a cached
-            # payload with expired URLs.
             response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
             response.headers['Pragma'] = 'no-cache'
             response.headers['Expires'] = '0'

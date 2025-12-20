@@ -199,9 +199,9 @@ export function openLightbox(url, key = null) {
             fetchSinglePhoto(currentKey)
                 .then(data => {
                     if (data && data.full_url) {
-                        // Append timestamp to bypass browser cache
-                        const sep = data.full_url.includes('?') ? '&' : '?';
-                        lightboxImg.src = `${data.full_url}${sep}retry=${Date.now()}`;
+                        // FIX: Do NOT append timestamp to Signed URLs, it breaks the signature.
+                        // The fresh URL from backend is already unique due to time-based signature.
+                        lightboxImg.src = data.full_url;
                     } else {
                         // Retry failed (no data)
                         if (lightboxSpinner) lightboxSpinner.classList.remove('active');

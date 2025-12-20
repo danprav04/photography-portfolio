@@ -37,8 +37,9 @@ export async function fetchSinglePhoto(key) {
     if (!key) return null;
     console.log(`Fetching single photo: ${key}`);
     try {
-        // Encode the key to handle slashes/special chars in URL
-        const response = await fetch(`/api/photo/${key}`);
+        // Encode the key to handle slashes/special chars in URL safe way
+        const encodedKey = encodeURIComponent(key);
+        const response = await fetch(`/api/photo/${encodedKey}`);
         
         if (!response.ok) {
             console.warn(`Could not load shared photo: ${response.status}`);

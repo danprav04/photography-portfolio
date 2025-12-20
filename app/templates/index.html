@@ -32,6 +32,9 @@
                 <a href="#gallery" class="nav-link">Portfolio</a>
                 <a href="#about" class="nav-link">About</a>
                 <a href="#gear" class="nav-link">Gear</a>
+                {% if content.stock_shutterstock or content.stock_alamy or content.stock_dreamstime %}
+                <a href="#stock" class="nav-link">Stock</a>
+                {% endif %}
                 <a href="#contact" class="nav-link">Contact</a>
                 {% if content.instagram_url %}
                 <a href="{{ content.instagram_url }}" target="_blank" rel="noopener noreferrer" class="nav-icon-link" aria-label="Instagram">
@@ -95,6 +98,39 @@
                 <!-- Gear items will be dynamically inserted here -->
             </div>
         </section>
+
+        {% if content.stock_shutterstock or content.stock_alamy or content.stock_dreamstime %}
+        <div class="content-divider"></div>
+
+        <section id="stock" class="content-section">
+            <h2>{{ content.stock_heading }}</h2>
+            <p style="margin-bottom: 2rem; color: var(--text-secondary);">
+                My work is available for licensing on the following platforms.
+            </p>
+            <div class="stock-grid">
+                {% if content.stock_shutterstock %}
+                <a href="{{ content.stock_shutterstock }}" target="_blank" rel="noopener noreferrer" class="stock-card">
+                    <span class="stock-name">Shutterstock</span>
+                    <span class="stock-link-text">Visit Portfolio &rarr;</span>
+                </a>
+                {% endif %}
+
+                {% if content.stock_alamy %}
+                <a href="{{ content.stock_alamy }}" target="_blank" rel="noopener noreferrer" class="stock-card">
+                    <span class="stock-name">Alamy</span>
+                    <span class="stock-link-text">Visit Portfolio &rarr;</span>
+                </a>
+                {% endif %}
+
+                {% if content.stock_dreamstime %}
+                <a href="{{ content.stock_dreamstime }}" target="_blank" rel="noopener noreferrer" class="stock-card">
+                    <span class="stock-name">Dreamstime</span>
+                    <span class="stock-link-text">Visit Portfolio &rarr;</span>
+                </a>
+                {% endif %}
+            </div>
+        </section>
+        {% endif %}
 
         <div class="content-divider"></div>
 

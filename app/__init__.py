@@ -170,7 +170,12 @@ def create_app():
             'instagram_url': app.config['PORTFOLIO_INSTAGRAM_URL'],
             'footer_text': app.config['PORTFOLIO_FOOTER_TEXT'],
             'amazon_tag': app.config['AMAZON_TAG'],
-            'disclaimer_text': app.config['PORTFOLIO_DISCLAIMER_TEXT']
+            'disclaimer_text': app.config['PORTFOLIO_DISCLAIMER_TEXT'],
+            # Stock Portfolio Links
+            'stock_heading': app.config['STOCK_HEADING'],
+            'stock_shutterstock': app.config['STOCK_URL_SHUTTERSTOCK'],
+            'stock_alamy': app.config['STOCK_URL_ALAMY'],
+            'stock_dreamstime': app.config['STOCK_URL_DREAMSTIME']
         }
         return render_template('index.html', content=content)
 

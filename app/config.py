@@ -39,3 +39,9 @@ class Config:
     # --- AFFILIATE CONFIGURATION ---
     AMAZON_TAG = content_config.get('AMAZON_TAG', '')
     PORTFOLIO_DISCLAIMER_TEXT = content_config.get('PORTFOLIO_DISCLAIMER_TEXT', 'As an Amazon Associate I earn from qualifying purchases.')
+
+    # --- STOCK PORTFOLIO CONFIGURATION ---
+    STOCK_HEADING = content_config.get('STOCK_HEADING', 'Licensing & Stock')
+    STOCK_URL_SHUTTERSTOCK = content_config.get('STOCK_URL_SHUTTERSTOCK', '')
+    STOCK_URL_ALAMY = content_config.get('STOCK_URL_ALAMY', '')
+    STOCK_URL_DREAMSTIME = content_config.get('STOCK_URL_DREAMSTIME', '')

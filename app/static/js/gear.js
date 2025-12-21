@@ -51,9 +51,9 @@ const gearList = [
     },
     {
       id: "adapter-43-52",
-      name: "Kiwifotos 43mm-52mm Step-Up Ring",
+      name: "43mm-52mm Step-Up Ring",
       description: "Adapts the compact XC 35mm lens to accept 52mm accessories and filters.",
-      asin: "B073365NZX",
+      asin: "B0CH3K2XB4",
       type: "amazon"
     },
   

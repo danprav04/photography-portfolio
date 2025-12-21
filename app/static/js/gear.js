@@ -33,6 +33,29 @@ const gearList = [
       asin: "B08TMZ59ZW",
       type: "amazon"
     },
+
+    // --- FILTERS & ADAPTERS ---
+    {
+      id: "filter-cpl",
+      name: "K&F Concept Circular Polarizer (CPL) Filter",
+      description: "Essential for cutting glare and enhancing contrast. I standardize on 67mm filters.",
+      asin: "B0CC54QJLX",
+      type: "amazon"
+    },
+    {
+      id: "adapter-52-67",
+      name: "K&F Concept 52-67mm Step-Up Ring",
+      description: "Magnetic adapter to mount 67mm filters onto the Viltrox 23mm lens.",
+      asin: "B0D3KKNH56",
+      type: "amazon"
+    },
+    {
+      id: "adapter-43-52",
+      name: "Kiwifotos 43mm-52mm Step-Up Ring",
+      description: "Adapts the compact XC 35mm lens to accept 52mm accessories and filters.",
+      asin: "B073365NZX",
+      type: "amazon"
+    },
   
     // --- ACCESSORIES ---
     {

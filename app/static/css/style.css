@@ -298,7 +298,8 @@ main {
 /* --- Gear Section --- */
 .gear-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    /* Changed to auto-fit to prevent empty gaps at the end of rows */
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
     gap: 1.5rem;
     text-align: left;
 }

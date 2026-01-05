@@ -192,7 +192,6 @@ def create_app():
             'disclaimer_text': app.config['PORTFOLIO_DISCLAIMER_TEXT'],
             'stock_heading': app.config['STOCK_HEADING'],
             'stock_shutterstock': app.config['STOCK_URL_SHUTTERSTOCK'],
-            'stock_alamy': app.config['STOCK_URL_ALAMY'],
             'stock_dreamstime': app.config['STOCK_URL_DREAMSTIME'],
             'stock_adobe': app.config['STOCK_URL_ADOBE']
         }

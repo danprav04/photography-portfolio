@@ -43,6 +43,5 @@ class Config:
     # --- STOCK PORTFOLIO CONFIGURATION ---
     STOCK_HEADING = content_config.get('STOCK_HEADING', 'Licensing & Stock')
     STOCK_URL_SHUTTERSTOCK = content_config.get('STOCK_URL_SHUTTERSTOCK', '')
-    STOCK_URL_ALAMY = content_config.get('STOCK_URL_ALAMY', '')
     STOCK_URL_DREAMSTIME = content_config.get('STOCK_URL_DREAMSTIME', '')
     STOCK_URL_ADOBE = content_config.get('STOCK_URL_ADOBE', '')

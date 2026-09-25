@@ -84,6 +84,8 @@ jobs:
               env_file: .env
               ports:
                 - "8000:8000"
+              volumes:
+                - ./cache:/app/cache
               networks:
                 - portfolio-net
           networks:
@@ -197,6 +199,7 @@ jobs:
 
             # --- 3. Prepare Server Environment ---
             sudo mkdir -p ${{ env.SERVER_APP_DIR }}
+            sudo mkdir -p ${{ env.SERVER_APP_DIR }}/cache/api ${{ env.SERVER_APP_DIR }}/cache/thumbnails
             {
               echo "OCI_ENDPOINT_URL=${OCI_ENDPOINT_URL}"
               echo "OCI_REGION=${OCI_REGION}"

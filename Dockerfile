@@ -7,9 +7,11 @@ WORKDIR /app
 # Stage 3: Set environment variables
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONUNBUFFERED 1
-# Set the number of Gunicorn workers.
-# Reduced to 1 per user request (optimized for low-resource environments).
+# Set the number of Gunicorn workers, threads, and timeout.
+# Optimized for low-resource environments using gthread worker class.
 ENV GUNICORN_WORKERS 1
+ENV GUNICORN_THREADS 4
+ENV GUNICORN_TIMEOUT 120
 
 # Stage 4: Install system dependencies for Pillow and application dependencies
 # Copy the requirements file first to leverage Docker cache
@@ -35,4 +37,4 @@ EXPOSE 8000
 # Stage 8: The command to run the application
 # Use /bin/sh -c for variable expansion.
 # Single-quote 'app:create_app()' to prevent the shell from interpreting the parentheses.
-CMD ["/bin/sh", "-c", "exec gunicorn --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS} --worker-class gevent --timeout 90 'app:create_app()'"]
+CMD ["/bin/sh", "-c", "exec gunicorn --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS} --worker-class gthread --threads ${GUNICORN_THREADS} --timeout ${GUNICORN_TIMEOUT} 'app:create_app()'"]
